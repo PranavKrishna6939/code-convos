@@ -3,11 +3,13 @@ import { dummyProjects } from '@/data/dummyProjects';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Settings, BarChart3, MessageSquare, Star } from 'lucide-react';
+import { ArrowLeft, Settings, BarChart3, MessageSquare, Star, Play, Download, Bot } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   
   const project = dummyProjects.find((p) => p.id === projectId);
 
@@ -24,6 +26,58 @@ const ProjectDetail = () => {
       default:
         return <Badge variant="secondary">Not Labeled</Badge>;
     }
+  };
+
+  const handleExport = () => {
+    // Create CSV headers
+    const headers = [
+      'Conversation ID',
+      'Customer Rating',
+      'Status',
+      'Customer Message',
+      'Agent Response',
+      'Axial Codes',
+      'Message Count'
+    ];
+
+    // Create CSV rows
+    const rows = project.conversations.map(conversation => {
+      const customerMessage = conversation.messages.find(msg => msg.role === 'customer')?.text || '';
+      const llmMessage = conversation.messages.find(msg => msg.role === 'llm')?.text || '';
+      const axialCodes = conversation.axial_codes ? conversation.axial_codes.join('; ') : '';
+      
+      return [
+        conversation.conversation_id,
+        conversation.customer_rating,
+        conversation.status || 'Not Labeled',
+        `"${customerMessage.replace(/"/g, '""')}"`, // Escape quotes for CSV
+        `"${llmMessage.replace(/"/g, '""')}"`, // Escape quotes for CSV
+        `"${axialCodes}"`,
+        conversation.messages.length
+      ];
+    });
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Create and download CSV file
+    const dataBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.project_name.replace(/\s+/g, '_').toLowerCase()}_export.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: 'Export successful',
+      description: `Project "${project.project_name}" has been exported as CSV file.`,
+    });
   };
 
   return (
@@ -45,6 +99,14 @@ const ProjectDetail = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button onClick={() => navigate(`/project/${projectId}/label`)}>
+                <Play className="w-4 h-4 mr-2" />
+                Start Labeling
+              </Button>
+              <Button variant="outline" onClick={() => handleExport()}>
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
               <Button variant="outline" onClick={() => navigate(`/project/${projectId}/visualization`)}>
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Label Visualization
@@ -79,12 +141,21 @@ const ProjectDetail = () => {
         )}
 
         <div className="space-y-4">
-          {project.conversations.map((conversation) => (
-            <Card key={conversation.conversation_id} className="p-6 hover:shadow-md transition-shadow">
+          {project.conversations.map((conversation, conversationIndex) => (
+            <Card 
+              key={conversation.conversation_id} 
+              className="p-6 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer group"
+              onClick={() => navigate(`/project/${projectId}/label?conversation=${conversationIndex}`)}
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <MessageSquare className="w-5 h-5 text-primary" />
-                  <h3 className="font-medium">Conversation #{conversation.conversation_id}</h3>
+                  <MessageSquare className="w-5 h-5 text-primary group-hover:text-primary/80 transition-colors" />
+                  <h3 className="font-medium group-hover:text-primary transition-colors">
+                    Conversation #{conversation.conversation_id}
+                  </h3>
+                  <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                    Click to label
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1">
@@ -109,17 +180,22 @@ const ProjectDetail = () => {
                 <div className="flex flex-wrap gap-2 pt-3 border-t border-border">
                   {conversation.axial_codes.map((codeName, idx) => {
                     const code = project.axial_codes?.find((c) => c.name === codeName);
+                    const isAIAssigned = conversation.ai_assigned_codes?.includes(codeName);
                     return (
-                      <span
-                        key={idx}
-                        className="px-2 py-1 rounded text-xs font-medium"
-                        style={{
-                          backgroundColor: code ? `${code.color}20` : '#e5e7eb',
-                          color: code?.color || '#6b7280',
-                        }}
-                      >
-                        {codeName}
-                      </span>
+                      <div key={idx} className="flex items-center gap-1">
+                        <span
+                          className="px-2 py-1 rounded text-xs font-medium"
+                          style={{
+                            backgroundColor: code ? `${code.color}20` : '#e5e7eb',
+                            color: code?.color || '#6b7280',
+                          }}
+                        >
+                          {codeName}
+                        </span>
+                        {isAIAssigned && (
+                          <Bot className="w-3 h-3 text-blue-600" />
+                        )}
+                      </div>
                     );
                   })}
                 </div>

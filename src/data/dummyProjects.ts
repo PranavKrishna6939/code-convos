@@ -5,7 +5,7 @@ export const dummyProjects: Project[] = [
     id: '1',
     project_name: 'Customer Support Q1 2024',
     date_imported: '2024-03-15',
-    labeled_count: 12,
+    labeled_count: 2,
     axial_codes: [
       { id: '1', name: 'Reasoning Error', color: '#ef4444', description: 'LLM made logical mistakes' },
       { id: '2', name: 'Hallucination', color: '#f97316', description: 'Fabricated information' },
@@ -106,7 +106,7 @@ export const dummyProjects: Project[] = [
     id: '3',
     project_name: 'Technical Support Eval',
     date_imported: '2024-03-01',
-    labeled_count: 8,
+    labeled_count: 2,
     axial_codes: [
       { id: '5', name: 'Technical Accuracy', color: '#3b82f6', description: 'Correct technical information' },
       { id: '6', name: 'Missing Steps', color: '#ec4899', description: 'Incomplete instructions' },
@@ -118,9 +118,24 @@ export const dummyProjects: Project[] = [
         status: 'completed',
         open_codes: 'Clear step-by-step guidance.',
         axial_codes: ['Technical Accuracy'],
+        ai_assigned_codes: ['Technical Accuracy'], // This was assigned by AI
         messages: [
           { role: 'customer', text: 'How do I configure my router?' },
           { role: 'llm', text: 'I\'ll guide you through the setup. First, connect the router to your modem using an ethernet cable. Then, plug in the power adapter.' },
+        ],
+      },
+      {
+        conversation_id: 9,
+        customer_rating: 2,
+        status: 'completed',
+        open_codes: 'Instructions were incomplete, missing key steps.',
+        axial_codes: ['Missing Steps', 'Technical Accuracy'],
+        ai_assigned_codes: ['Missing Steps'], // Only this one was assigned by AI
+        messages: [
+          { role: 'customer', text: 'My printer won\'t connect to WiFi. Can you help?' },
+          { role: 'llm', text: 'Sure! Go to your printer settings and select WiFi setup.' },
+          { role: 'customer', text: 'I did that but it\'s not finding my network.' },
+          { role: 'llm', text: 'Try restarting your printer.' },
         ],
       },
     ],

@@ -10,6 +10,7 @@ export interface Conversation {
   status?: 'not_labeled' | 'in_progress' | 'completed';
   open_codes?: string;
   axial_codes?: string[];
+  ai_assigned_codes?: string[]; // Codes that were assigned by AI/LLM
 }
 
 export interface AxialCode {
