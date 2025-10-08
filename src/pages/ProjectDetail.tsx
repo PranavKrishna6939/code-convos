@@ -1,22 +1,13 @@
-import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { dummyProjects } from '@/data/dummyProjects';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Play, MessageSquare, Star } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { ArrowLeft, Settings, BarChart3, MessageSquare, Star } from 'lucide-react';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const [orderModalOpen, setOrderModalOpen] = useState(false);
   
   const project = dummyProjects.find((p) => p.id === projectId);
 
@@ -33,11 +24,6 @@ const ProjectDetail = () => {
       default:
         return <Badge variant="secondary">Not Labeled</Badge>;
     }
-  };
-
-  const handleStartLabeling = (order: 'sequential' | 'rating') => {
-    setOrderModalOpen(false);
-    navigate(`/project/${projectId}/label?order=${order}`);
   };
 
   return (
@@ -58,10 +44,15 @@ const ProjectDetail = () => {
                 </p>
               </div>
             </div>
-            <Button onClick={() => setOrderModalOpen(true)}>
-              <Play className="w-4 h-4 mr-2" />
-              Start Labeling
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => navigate(`/project/${projectId}/visualization`)}>
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Label Visualization
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => navigate(`/project/${projectId}/config`)}>
+                <Settings className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -137,39 +128,6 @@ const ProjectDetail = () => {
           ))}
         </div>
       </main>
-
-      <Dialog open={orderModalOpen} onOpenChange={setOrderModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Choose Labeling Order</DialogTitle>
-            <DialogDescription>
-              Select how you'd like to go through the conversations
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 mt-4">
-            <Button
-              variant="outline"
-              className="w-full justify-start h-auto p-4"
-              onClick={() => handleStartLabeling('sequential')}
-            >
-              <div className="text-left">
-                <div className="font-medium">Sequential Order</div>
-                <div className="text-sm text-muted-foreground">Label conversations in dataset order</div>
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start h-auto p-4"
-              onClick={() => handleStartLabeling('rating')}
-            >
-              <div className="text-left">
-                <div className="font-medium">By Customer Rating</div>
-                <div className="text-sm text-muted-foreground">Start with lowest-rated conversations</div>
-              </div>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import ProjectDetail from "./pages/ProjectDetail";
 import LabelingInterface from "./pages/LabelingInterface";
+import LabelConfiguration from "./pages/LabelConfiguration";
+import LabelVisualization from "./pages/LabelVisualization";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +22,8 @@ const App = () => (
           <Route path="/" element={<Dashboard />} />
           <Route path="/project/:projectId" element={<ProjectDetail />} />
           <Route path="/project/:projectId/label" element={<LabelingInterface />} />
+          <Route path="/project/:projectId/config" element={<LabelConfiguration />} />
+          <Route path="/project/:projectId/visualization" element={<LabelVisualization />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
