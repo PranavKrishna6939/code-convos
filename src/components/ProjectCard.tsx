@@ -16,8 +16,8 @@ export const ProjectCard = ({ project }: ProjectCardProps) => {
 
   return (
     <Link to={`/project/${project.id}`}>
-      <Card className="p-6 hover:shadow-lg transition-all duration-200 hover:border-primary/50 cursor-pointer group">
-        <div className="space-y-4">
+      <Card className="p-6 h-full hover:shadow-lg transition-all duration-200 hover:border-primary/50 cursor-pointer group">
+        <div className="space-y-4 flex flex-col h-full">
           <div className="flex items-start justify-between">
             <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
               {project.project_name}
@@ -45,7 +45,7 @@ export const ProjectCard = ({ project }: ProjectCardProps) => {
           </div>
 
           {project.axial_codes && project.axial_codes.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-2 border-t border-border">
+            <div className="flex flex-wrap gap-1 pt-2 border-t border-border mt-auto">
               {project.axial_codes.slice(0, 3).map((code) => (
                 <span
                   key={code.id}

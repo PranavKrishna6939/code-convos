@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, CheckCircle2 } from 'lucide-react';
+import { Upload, CheckCircle2, FileUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ImportModalProps {
@@ -15,6 +15,7 @@ export const ImportModal = ({ open, onOpenChange, onImport }: ImportModalProps) 
   const [jsonInput, setJsonInput] = useState('');
   const [isValidJson, setIsValidJson] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleJsonChange = (value: string) => {
@@ -34,6 +35,18 @@ export const ImportModal = ({ open, onOpenChange, onImport }: ImportModalProps) 
     }
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        handleJsonChange(content);
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const handleImport = () => {
     if (isValidJson && previewData) {
       onImport(previewData);
@@ -43,6 +56,10 @@ export const ImportModal = ({ open, onOpenChange, onImport }: ImportModalProps) 
       });
       setJsonInput('');
       setPreviewData(null);
+      setIsValidJson(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       onOpenChange(false);
     }
   };
@@ -72,6 +89,38 @@ export const ImportModal = ({ open, onOpenChange, onImport }: ImportModalProps) 
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
+          <div>
+            <label className="text-sm font-medium mb-2 block">Upload JSON File</label>
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="file-upload"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full"
+              >
+                <FileUp className="w-4 h-4 mr-2" />
+                Choose JSON File
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or paste JSON</span>
+            </div>
+          </div>
+
           <div>
             <label className="text-sm font-medium mb-2 block">JSON Data</label>
             <Textarea

@@ -64,7 +64,7 @@ const Dashboard = () => {
             <p className="text-muted-foreground">No projects found. Import your first dataset to get started.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr">
             {filteredProjects.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}
