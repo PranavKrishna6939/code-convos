@@ -3,11 +3,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
+import Navigation from "./components/Navigation";
+import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
-import LabelingInterface from "./pages/LabelingInterface";
-import LabelConfiguration from "./pages/LabelConfiguration";
-import LabelVisualization from "./pages/LabelVisualization";
+import JudgeAgents from "./pages/JudgeAgents";
+import JudgeAgentEdit from "./pages/JudgeAgentEdit";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -18,15 +18,18 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/project/:projectId" element={<ProjectDetail />} />
-          <Route path="/project/:projectId/label" element={<LabelingInterface />} />
-          <Route path="/project/:projectId/config" element={<LabelConfiguration />} />
-          <Route path="/project/:projectId/visualization" element={<LabelVisualization />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <div className="min-h-screen flex flex-col">
+          <Navigation />
+          <div className="flex-1">
+            <Routes>
+              <Route path="/" element={<Projects />} />
+              <Route path="/project/:projectId" element={<ProjectDetail />} />
+              <Route path="/judges" element={<JudgeAgents />} />
+              <Route path="/judges/:agentId" element={<JudgeAgentEdit />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
+        </div>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

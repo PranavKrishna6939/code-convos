@@ -1,209 +1,252 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { dummyProjects } from '@/data/dummyProjects';
+import { useState, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { dummyProjects, dummyJudgeAgents } from '@/data/dummyData';
+import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
-import { ArrowLeft, Settings, BarChart3, MessageSquare, Star, Play, Download, Bot } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { ArrowLeft, Play } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
   
-  const project = dummyProjects.find((p) => p.id === projectId);
+  const project = dummyProjects.find(p => p.id === projectId);
+  const [conversations, setConversations] = useState<Conversation[]>(project?.conversations || []);
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(conversations[0]?.id || null);
+  const [selectedTurnIndex, setSelectedTurnIndex] = useState<number | null>(null);
+  const [selectedJudge, setSelectedJudge] = useState<string>('');
+
+  const selectedConversation = useMemo(() => 
+    conversations.find(c => c.id === selectedConvId),
+    [conversations, selectedConvId]
+  );
+
+  // Get assistant turn indices
+  const assistantTurns = useMemo(() => {
+    if (!selectedConversation) return [];
+    let turnIndex = 0;
+    return selectedConversation.messages.map((msg, idx) => {
+      if (msg.role === 'assistant') {
+        return { messageIndex: idx, turnIndex: turnIndex++ };
+      }
+      return { messageIndex: idx, turnIndex: -1 };
+    });
+  }, [selectedConversation]);
+
+  const getAssistantTurnIndex = (messageIndex: number) => {
+    return assistantTurns[messageIndex]?.turnIndex ?? -1;
+  };
+
+  const getErrorsForTurn = (turnIndex: number): TurnError[] => {
+    return selectedConversation?.turn_errors[turnIndex] || [];
+  };
+
+  const handleRunJudge = () => {
+    if (!selectedJudge || !selectedConvId) return;
+    // In production, this would call the LLM API
+    console.log(`Running judge ${selectedJudge} on conversation ${selectedConvId}`);
+  };
+
+  const updateEditedReason = (turnIndex: number, errorIndex: number, newReason: string) => {
+    setConversations(prev => prev.map(conv => {
+      if (conv.id !== selectedConvId) return conv;
+      const newTurnErrors = { ...conv.turn_errors };
+      if (newTurnErrors[turnIndex]) {
+        newTurnErrors[turnIndex] = newTurnErrors[turnIndex].map((err, idx) => 
+          idx === errorIndex ? { ...err, edited_reason: newReason } : err
+        );
+      }
+      return { ...conv, turn_errors: newTurnErrors };
+    }));
+  };
 
   if (!project) {
-    return <div>Project not found</div>;
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Project not found</p>
+      </div>
+    );
   }
 
-  const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge variant="success">Completed</Badge>;
-      case 'in_progress':
-        return <Badge variant="warning">In Progress</Badge>;
-      default:
-        return <Badge variant="secondary">Not Labeled</Badge>;
-    }
-  };
-
-  const handleExport = () => {
-    // Create CSV headers
-    const headers = [
-      'Conversation ID',
-      'Customer Rating',
-      'Status',
-      'Customer Message',
-      'Agent Response',
-      'Axial Codes',
-      'Message Count'
-    ];
-
-    // Create CSV rows
-    const rows = project.conversations.map(conversation => {
-      const customerMessage = conversation.messages.find(msg => msg.role === 'customer')?.text || '';
-      const llmMessage = conversation.messages.find(msg => msg.role === 'llm')?.text || '';
-      const axialCodes = conversation.axial_codes ? conversation.axial_codes.join('; ') : '';
-      
-      return [
-        conversation.conversation_id,
-        conversation.customer_rating,
-        conversation.status || 'Not Labeled',
-        `"${customerMessage.replace(/"/g, '""')}"`, // Escape quotes for CSV
-        `"${llmMessage.replace(/"/g, '""')}"`, // Escape quotes for CSV
-        `"${axialCodes}"`,
-        conversation.messages.length
-      ];
-    });
-
-    // Combine headers and rows
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
-    // Create and download CSV file
-    const dataBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${project.project_name.replace(/\s+/g, '_').toLowerCase()}_export.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: 'Export successful',
-      description: `Project "${project.project_name}" has been exported as CSV file.`,
-    });
-  };
+  const currentTurnErrors = selectedTurnIndex !== null 
+    ? getErrorsForTurn(selectedTurnIndex) 
+    : [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon">
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">{project.project_name}</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {project.labeled_count} of {project.conversations.length} conversations labeled
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => navigate(`/project/${projectId}/label`)}>
-                <Play className="w-4 h-4 mr-2" />
-                Start Labeling
-              </Button>
-              <Button variant="outline" onClick={() => handleExport()}>
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-              <Button variant="outline" onClick={() => navigate(`/project/${projectId}/visualization`)}>
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Label Visualization
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => navigate(`/project/${projectId}/config`)}>
-                <Settings className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <div className="border-b border-border px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm font-medium text-foreground">{project.name}</span>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {project.axial_codes && project.axial_codes.length > 0 && (
-          <Card className="p-4 mb-6">
-            <h3 className="font-semibold mb-3">Axial Codes</h3>
-            <div className="flex flex-wrap gap-2">
-              {project.axial_codes.map((code) => (
-                <span
-                  key={code.id}
-                  className="px-3 py-1.5 rounded-md text-sm font-medium"
-                  style={{ backgroundColor: `${code.color}20`, color: code.color }}
-                >
-                  {code.name}
-                  {code.description && (
-                    <span className="ml-2 text-xs opacity-75">• {code.description}</span>
-                  )}
-                </span>
+        <div className="flex items-center gap-2">
+          <Select value={selectedJudge} onValueChange={setSelectedJudge}>
+            <SelectTrigger className="w-48 h-8 text-sm">
+              <SelectValue placeholder="Select judge..." />
+            </SelectTrigger>
+            <SelectContent>
+              {dummyJudgeAgents.map(judge => (
+                <SelectItem key={judge.id} value={judge.id}>
+                  {judge.label_name}
+                </SelectItem>
               ))}
-            </div>
-          </Card>
-        )}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={handleRunJudge} disabled={!selectedJudge}>
+            <Play className="w-3 h-3 mr-1" />
+            Run
+          </Button>
+        </div>
+      </div>
 
-        <div className="space-y-4">
-          {project.conversations.map((conversation, conversationIndex) => (
-            <Card 
-              key={conversation.conversation_id} 
-              className="p-6 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer group"
-              onClick={() => navigate(`/project/${projectId}/label?conversation=${conversationIndex}`)}
+      {/* Three-column layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: Conversation List */}
+        <div className="w-48 border-r border-border overflow-y-auto">
+          {conversations.map((conv) => (
+            <div
+              key={conv.id}
+              onClick={() => {
+                setSelectedConvId(conv.id);
+                setSelectedTurnIndex(null);
+              }}
+              className={cn(
+                "px-3 py-2 border-b border-border cursor-pointer text-sm",
+                selectedConvId === conv.id 
+                  ? "bg-muted" 
+                  : "hover:bg-muted/50"
+              )}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <MessageSquare className="w-5 h-5 text-primary group-hover:text-primary/80 transition-colors" />
-                  <h3 className="font-medium group-hover:text-primary transition-colors">
-                    Conversation #{conversation.conversation_id}
-                  </h3>
-                  <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                    Click to label
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-warning text-warning" />
-                    <span className="text-sm font-medium">{conversation.customer_rating}/5</span>
+              <span className="font-mono text-muted-foreground">{conv.id}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Center: Conversation View */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {selectedConversation ? (
+            <div className="space-y-3 max-w-2xl">
+              {selectedConversation.messages.map((msg, idx) => {
+                const turnIndex = getAssistantTurnIndex(idx);
+                const hasErrors = turnIndex >= 0 && Object.keys(selectedConversation.turn_errors).includes(turnIndex.toString());
+                const errors = turnIndex >= 0 ? getErrorsForTurn(turnIndex) : [];
+                const isSelected = selectedTurnIndex === turnIndex && turnIndex >= 0;
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      if (msg.role === 'assistant') {
+                        setSelectedTurnIndex(turnIndex);
+                      }
+                    }}
+                    className={cn(
+                      "p-3 rounded border",
+                      msg.role === 'user' 
+                        ? "bg-muted/30 border-border ml-0 mr-12" 
+                        : hasErrors
+                          ? "bg-destructive/10 border-destructive/30 ml-12 mr-0 cursor-pointer"
+                          : "bg-card border-border ml-12 mr-0 cursor-pointer",
+                      isSelected && "ring-2 ring-primary"
+                    )}
+                  >
+                    <div className="text-xs text-muted-foreground mb-1 font-mono">
+                      {msg.role === 'assistant' ? `assistant [turn ${turnIndex}]` : 'user'}
+                    </div>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</p>
+                    
+                    {/* Error chips */}
+                    {errors.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {errors.map((err, errIdx) => (
+                          <span 
+                            key={errIdx}
+                            className="px-2 py-0.5 text-xs font-mono bg-destructive/20 text-destructive rounded"
+                          >
+                            {err.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {getStatusBadge(conversation.status)}
-                </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground py-12">
+              Select a conversation
+            </div>
+          )}
+        </div>
+
+        {/* Right: Error & Judge Panel */}
+        <div className="w-80 border-l border-border overflow-y-auto p-4">
+          {selectedTurnIndex !== null ? (
+            <div className="space-y-6">
+              {/* Open Codes Section */}
+              <div>
+                <h3 className="text-sm font-medium text-foreground mb-2">Open Codes</h3>
+                {currentTurnErrors.length > 0 ? (
+                  <div className="space-y-3">
+                    {currentTurnErrors.map((error, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
+                        <Textarea
+                          value={error.edited_reason ?? error.original_reason}
+                          onChange={(e) => updateEditedReason(selectedTurnIndex, idx, e.target.value)}
+                          className="text-sm font-mono min-h-20"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No errors flagged for this turn</p>
+                )}
               </div>
 
-              <div className="space-y-2 mb-4">
-                <div className="text-sm">
-                  <span className="font-medium text-foreground">Customer:</span>{' '}
-                  <span className="text-muted-foreground">
-                    {conversation.messages[0]?.text.substring(0, 100)}
-                    {conversation.messages[0]?.text.length > 100 && '...'}
-                  </span>
-                </div>
-              </div>
-
-              {conversation.axial_codes && conversation.axial_codes.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-3 border-t border-border">
-                  {conversation.axial_codes.map((codeName, idx) => {
-                    const code = project.axial_codes?.find((c) => c.name === codeName);
-                    const isAIAssigned = conversation.ai_assigned_codes?.includes(codeName);
+              {/* Axial Codes Section */}
+              <div>
+                <h3 className="text-sm font-medium text-foreground mb-2">Axial Codes (Labels)</h3>
+                <div className="space-y-2">
+                  {dummyJudgeAgents.map(judge => {
+                    const isAssigned = currentTurnErrors.some(e => e.label === judge.label_name);
                     return (
-                      <div key={idx} className="flex items-center gap-1">
-                        <span
-                          className="px-2 py-1 rounded text-xs font-medium"
-                          style={{
-                            backgroundColor: code ? `${code.color}20` : '#e5e7eb',
-                            color: code?.color || '#6b7280',
-                          }}
-                        >
-                          {codeName}
-                        </span>
-                        {isAIAssigned && (
-                          <Bot className="w-3 h-3 text-blue-600" />
+                      <div 
+                        key={judge.id}
+                        className={cn(
+                          "p-2 rounded border text-sm",
+                          isAssigned 
+                            ? "bg-destructive/10 border-destructive/30" 
+                            : "bg-muted/30 border-border"
                         )}
+                      >
+                        <div className="font-mono text-foreground">{judge.label_name}</div>
+                        <div className="text-xs text-muted-foreground">{judge.description}</div>
+                        <div className="text-xs mt-1">
+                          {isAssigned ? (
+                            <span className="text-destructive">Assigned</span>
+                          ) : (
+                            <span className="text-muted-foreground">Not Assigned</span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </Card>
-          ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground py-12 text-sm">
+              Click an assistant turn to view details
+            </div>
+          )}
         </div>
-      </main>
+      </div>
     </div>
   );
 };
