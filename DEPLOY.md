@@ -56,12 +56,12 @@ pm2 startup
 
 ## 5. Security Group (Firewall)
 
-Ensure your EC2 Security Group allows inbound traffic on port **3001**.
+Ensure your EC2 Security Group allows inbound traffic on port **4001**.
 - Type: Custom TCP
-- Port Range: 3001
+- Port Range: 4001
 - Source: 0.0.0.0/0 (Anywhere)
 
 ## 6. Access the App
 
 Open your browser and go to:
-`http://<your-ec2-public-ip>:3001`
+`http://<your-ec2-public-ip>:4001`
