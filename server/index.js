@@ -74,26 +74,26 @@ app.post('/api/projects', async (req, res) => {
       }
     });
 
-    // The prompt says "Store the FULL API response".
-    // I need to map this to my internal structure or just store it.
-    // My internal structure expects `conversations` array.
-    // Let's assume the API returns an array of conversations or an object with a list.
-    // I'll inspect the response structure if I could, but I can't.
-    // I'll assume the response.data IS the list or contains it.
-    
-    // Let's assume response.data is an array of conversations.
-    // I need to transform them to match my `Conversation` type:
-    // { id, messages: [], turn_errors: {} }
-    
-    // Wait, the prompt says "Store the FULL API response".
-    // And "Do NOT pre-process conversations".
-    // But for the UI to work, I need to map it to the UI's expected format at some point.
-    // I'll store the raw data in a `raw_data` field and map it on the fly or map it once.
-    // The UI expects `messages` with `role` and `content`.
-    // I'll assume the external API returns something compatible or I'll need to map it.
-    // Let's assume standard OpenAI-like format for messages.
-    
-    const rawConversations = Array.isArray(response.data) ? response.data : (response.data.conversations || []);
+    console.log('API Response Status:', response.status);
+    console.log('API Response Data Type:', typeof response.data);
+    if (typeof response.data === 'object' && response.data !== null) {
+        console.log('API Response Keys:', Object.keys(response.data));
+    }
+
+    let rawConversations = [];
+    if (Array.isArray(response.data)) {
+        rawConversations = response.data;
+    } else if (response.data && Array.isArray(response.data.conversations)) {
+        rawConversations = response.data.conversations;
+    } else if (response.data && Array.isArray(response.data.items)) {
+        rawConversations = response.data.items;
+    } else if (response.data && Array.isArray(response.data.data)) {
+        rawConversations = response.data.data;
+    } else if (response.data && Array.isArray(response.data.results)) {
+        rawConversations = response.data.results;
+    }
+
+    console.log(`Found ${rawConversations.length} conversations`);
     
     const conversations = rawConversations.map((c, idx) => {
       let messages = [];
