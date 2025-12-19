@@ -1,13 +1,16 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dummyJudgeAgents } from '@/data/dummyData';
-import { JudgeAgent } from '@/types/judge';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 
 const JudgeAgents = () => {
   const navigate = useNavigate();
-  const [agents] = useState<JudgeAgent[]>(dummyJudgeAgents);
+  
+  const { data: agents = [] } = useQuery({
+    queryKey: ['judges'],
+    queryFn: api.getJudges
+  });
 
   return (
     <div className="min-h-screen bg-background">

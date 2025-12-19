@@ -1,26 +1,60 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { dummyProjects, dummyJudgeAgents } from '@/data/dummyData';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Play } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/use-toast';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   
-  const project = dummyProjects.find(p => p.id === projectId);
-  const [conversations, setConversations] = useState<Conversation[]>(project?.conversations || []);
-  const [selectedConvId, setSelectedConvId] = useState<string | null>(conversations[0]?.id || null);
+  const { data: project, isLoading: isProjectLoading } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api.getProject(projectId!),
+    enabled: !!projectId
+  });
+
+  const { data: judges = [] } = useQuery({
+    queryKey: ['judges'],
+    queryFn: api.getJudges
+  });
+
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [selectedTurnIndex, setSelectedTurnIndex] = useState<number | null>(null);
   const [selectedJudge, setSelectedJudge] = useState<string>('');
+  const [outcomeFilter, setOutcomeFilter] = useState<string>('all');
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+
+  // Set initial selected conversation
+  useEffect(() => {
+    if (project?.conversations?.length && !selectedConvId) {
+      setSelectedConvId(project.conversations[0].id);
+    }
+  }, [project, selectedConvId]);
+
+  const filteredConversations = useMemo(() => {
+    if (!project?.conversations) return [];
+    if (outcomeFilter === 'all') return project.conversations;
+    return project.conversations.filter(c => c.outcome === outcomeFilter);
+  }, [project?.conversations, outcomeFilter]);
+
+  const outcomes = useMemo(() => {
+    if (!project?.conversations) return [];
+    const uniqueOutcomes = Array.from(new Set(project.conversations.map(c => c.outcome || 'unknown')));
+    return ['all', ...uniqueOutcomes];
+  }, [project?.conversations]);
 
   const selectedConversation = useMemo(() => 
-    conversations.find(c => c.id === selectedConvId),
-    [conversations, selectedConvId]
+    project?.conversations.find(c => c.id === selectedConvId),
+    [project, selectedConvId]
   );
 
   // Get assistant turn indices
@@ -43,24 +77,68 @@ const ProjectDetail = () => {
     return selectedConversation?.turn_errors[turnIndex] || [];
   };
 
+  const runJudgeMutation = useMutation({
+    mutationFn: async ({ convId }: { convId: string }) => {
+      if (!selectedJudge || !projectId) return;
+      return api.runJudge(projectId, convId, selectedJudge);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    },
+    onError: (error) => {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to run judge", variant: "destructive" });
+    }
+  });
+
+  const updateReasonMutation = useMutation({
+    mutationFn: async ({ turnIndex, label, reason }: { turnIndex: number, label: string, reason: string }) => {
+      if (!selectedConvId || !projectId) return;
+      return api.updateEvaluation(projectId, selectedConvId, turnIndex, label, reason);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast({ title: "Saved", description: "Reason updated" });
+    }
+  });
+
   const handleRunJudge = () => {
-    if (!selectedJudge || !selectedConvId) return;
-    // In production, this would call the LLM API
-    console.log(`Running judge ${selectedJudge} on conversation ${selectedConvId}`);
+    if (selectedConvId) {
+      runJudgeMutation.mutate({ convId: selectedConvId });
+      toast({ title: "Success", description: "Judge run started" });
+    }
   };
 
-  const updateEditedReason = (turnIndex: number, errorIndex: number, newReason: string) => {
-    setConversations(prev => prev.map(conv => {
-      if (conv.id !== selectedConvId) return conv;
-      const newTurnErrors = { ...conv.turn_errors };
-      if (newTurnErrors[turnIndex]) {
-        newTurnErrors[turnIndex] = newTurnErrors[turnIndex].map((err, idx) => 
-          idx === errorIndex ? { ...err, edited_reason: newReason } : err
-        );
+  const handleRunAllFiltered = async () => {
+    if (!selectedJudge || !projectId || filteredConversations.length === 0) return;
+    
+    setIsBatchRunning(true);
+    toast({ title: "Batch Run Started", description: `Running judge on ${filteredConversations.length} conversations...` });
+
+    let completed = 0;
+    const total = filteredConversations.length;
+
+    for (const conv of filteredConversations) {
+      completed++;
+      try {
+        await api.runJudge(projectId, conv.id, selectedJudge, { current: completed, total });
+      } catch (e) {
+        console.error(`Failed to run judge on ${conv.id}`, e);
       }
-      return { ...conv, turn_errors: newTurnErrors };
-    }));
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    setIsBatchRunning(false);
+    toast({ title: "Batch Run Completed", description: "All conversations processed." });
   };
+
+  const handleUpdateReason = (turnIndex: number, label: string, newReason: string) => {
+    updateReasonMutation.mutate({ turnIndex, label, reason: newReason });
+  };
+
+  if (isProjectLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
 
   if (!project) {
     return (
@@ -75,9 +153,9 @@ const ProjectDetail = () => {
     : [];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen overflow-hidden bg-background flex flex-col">
       {/* Header */}
-      <div className="border-b border-border px-4 py-3 flex items-center justify-between">
+      <div className="border-b border-border px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4" />
@@ -85,21 +163,47 @@ const ProjectDetail = () => {
           <span className="text-sm font-medium text-foreground">{project.name}</span>
         </div>
         <div className="flex items-center gap-2">
+          <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+            <SelectTrigger className="w-32 h-8 text-sm">
+              <SelectValue placeholder="Filter Outcome" />
+            </SelectTrigger>
+            <SelectContent>
+              {outcomes.map(outcome => (
+                <SelectItem key={outcome} value={outcome}>
+                  {outcome === 'all' ? 'All Outcomes' : outcome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="h-4 w-px bg-border mx-2" />
           <Select value={selectedJudge} onValueChange={setSelectedJudge}>
             <SelectTrigger className="w-48 h-8 text-sm">
               <SelectValue placeholder="Select judge..." />
             </SelectTrigger>
             <SelectContent>
-              {dummyJudgeAgents.map(judge => (
+              {judges.map(judge => (
                 <SelectItem key={judge.id} value={judge.id}>
                   {judge.label_name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button size="sm" variant="outline" onClick={handleRunJudge} disabled={!selectedJudge}>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={handleRunJudge} 
+            disabled={!selectedJudge || runJudgeMutation.isPending || isBatchRunning}
+          >
             <Play className="w-3 h-3 mr-1" />
             Run
+          </Button>
+          <Button 
+            size="sm" 
+            variant="default" 
+            onClick={handleRunAllFiltered} 
+            disabled={!selectedJudge || isBatchRunning || filteredConversations.length === 0}
+          >
+            {isBatchRunning ? 'Running All...' : `Run All (${filteredConversations.length})`}
           </Button>
         </div>
       </div>
@@ -108,7 +212,7 @@ const ProjectDetail = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Conversation List */}
         <div className="w-48 border-r border-border overflow-y-auto">
-          {conversations.map((conv) => (
+          {filteredConversations.map((conv) => (
             <div
               key={conv.id}
               onClick={() => {
@@ -122,7 +226,8 @@ const ProjectDetail = () => {
                   : "hover:bg-muted/50"
               )}
             >
-              <span className="font-mono text-muted-foreground">{conv.id}</span>
+              <span className="font-mono text-muted-foreground truncate block" title={conv.id}>{conv.id}</span>
+              <span className="text-xs text-muted-foreground block mt-1 truncate">{conv.outcome}</span>
             </div>
           ))}
         </div>
@@ -133,7 +238,7 @@ const ProjectDetail = () => {
             <div className="space-y-3 max-w-2xl">
               {selectedConversation.messages.map((msg, idx) => {
                 const turnIndex = getAssistantTurnIndex(idx);
-                const hasErrors = turnIndex >= 0 && Object.keys(selectedConversation.turn_errors).includes(turnIndex.toString());
+                const hasErrors = turnIndex >= 0 && selectedConversation.turn_errors && Object.keys(selectedConversation.turn_errors).includes(turnIndex.toString());
                 const errors = turnIndex >= 0 ? getErrorsForTurn(turnIndex) : [];
                 const isSelected = selectedTurnIndex === turnIndex && turnIndex >= 0;
 
@@ -185,21 +290,21 @@ const ProjectDetail = () => {
         </div>
 
         {/* Right: Error & Judge Panel */}
-        <div className="w-80 border-l border-border overflow-y-auto p-4">
+        <div className="w-80 border-l border-border flex flex-col bg-background">
           {selectedTurnIndex !== null ? (
-            <div className="space-y-6">
-              {/* Open Codes Section */}
-              <div>
+            <>
+              {/* Top: Open Codes (Flexible, takes remaining space) */}
+              <div className="flex-1 overflow-y-auto p-4 min-h-0">
                 <h3 className="text-sm font-medium text-foreground mb-2">Open Codes</h3>
                 {currentTurnErrors.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 h-full flex flex-col">
                     {currentTurnErrors.map((error, idx) => (
-                      <div key={idx} className="space-y-1">
+                      <div key={`${selectedTurnIndex}-${error.label}`} className="space-y-1 flex-1 flex flex-col">
                         <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
                         <Textarea
-                          value={error.edited_reason ?? error.original_reason}
-                          onChange={(e) => updateEditedReason(selectedTurnIndex, idx, e.target.value)}
-                          className="text-sm font-mono min-h-20"
+                          defaultValue={error.edited_reason ?? error.original_reason}
+                          onBlur={(e) => handleUpdateReason(selectedTurnIndex, error.label, e.target.value)}
+                          className="text-sm font-mono flex-1 min-h-[150px] resize-none"
                         />
                       </div>
                     ))}
@@ -209,11 +314,11 @@ const ProjectDetail = () => {
                 )}
               </div>
 
-              {/* Axial Codes Section */}
-              <div>
+              {/* Bottom: Axial Codes (Fixed height, pinned to bottom) */}
+              <div className="h-[400px] border-t border-border p-4 overflow-y-auto bg-muted/5">
                 <h3 className="text-sm font-medium text-foreground mb-2">Axial Codes (Labels)</h3>
                 <div className="space-y-2">
-                  {dummyJudgeAgents.map(judge => {
+                  {judges.map(judge => {
                     const isAssigned = currentTurnErrors.some(e => e.label === judge.label_name);
                     return (
                       <div 
@@ -239,9 +344,9 @@ const ProjectDetail = () => {
                   })}
                 </div>
               </div>
-            </div>
+            </>
           ) : (
-            <div className="text-center text-muted-foreground py-12 text-sm">
+            <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-sm">
               Click an assistant turn to view details
             </div>
           )}

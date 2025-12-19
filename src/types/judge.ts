@@ -4,6 +4,8 @@ export interface JudgeAgent {
   label_name: string;
   description: string;
   prompt: string;
+  model?: string;
+  temperature?: number;
 }
 
 export interface JudgeResult {
@@ -30,6 +32,7 @@ export interface ConversationMessage {
 export interface Conversation {
   id: string;
   messages: ConversationMessage[];
+  outcome?: string;
   turn_errors: Record<number, TurnError[]>; // turn_index -> errors
 }
 
@@ -38,4 +41,5 @@ export interface Project {
   name: string;
   conversations: Conversation[];
   api_key: string;
+  conversationCount?: number;
 }

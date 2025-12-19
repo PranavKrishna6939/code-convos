@@ -1,35 +1,75 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { dummyJudgeAgents } from '@/data/dummyData';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 const JudgeAgentEdit = () => {
   const { agentId } = useParams();
   const navigate = useNavigate();
   const isNew = agentId === 'new';
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const existingAgent = !isNew ? dummyJudgeAgents.find(a => a.id === agentId) : null;
+  const { data: existingAgent } = useQuery({
+    queryKey: ['judge', agentId],
+    queryFn: () => api.getJudge(agentId!),
+    enabled: !isNew
+  });
 
-  const [labelName, setLabelName] = useState(existingAgent?.label_name || '');
-  const [description, setDescription] = useState(existingAgent?.description || '');
-  const [prompt, setPrompt] = useState(existingAgent?.prompt || '');
+  const [labelName, setLabelName] = useState('');
+  const [description, setDescription] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [model, setModel] = useState('gpt-4.1-mini');
+  const [temperature, setTemperature] = useState('0.5');
 
   useEffect(() => {
     if (existingAgent) {
       setLabelName(existingAgent.label_name);
       setDescription(existingAgent.description);
       setPrompt(existingAgent.prompt);
+      setModel(existingAgent.model || 'gpt-4.1-mini');
+      setTemperature(existingAgent.temperature?.toString() || '0.5');
     }
   }, [existingAgent]);
 
+  const createMutation = useMutation({
+    mutationFn: api.createJudge,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['judges'] });
+      toast({ title: "Success", description: "Judge agent created" });
+      navigate('/judges');
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => api.updateJudge(agentId!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['judges'] });
+      queryClient.invalidateQueries({ queryKey: ['judge', agentId] });
+      toast({ title: "Success", description: "Judge agent updated" });
+      navigate('/judges');
+    }
+  });
+
   const handleSave = () => {
-    // In production, this would save to backend
-    console.log('Saving agent:', { labelName, description, prompt });
-    navigate('/judges');
+    const data = { 
+      label_name: labelName, 
+      description, 
+      prompt,
+      model,
+      temperature: parseFloat(temperature)
+    };
+    if (isNew) {
+      createMutation.mutate(data);
+    } else {
+      updateMutation.mutate(data);
+    }
   };
 
   return (
@@ -44,8 +84,8 @@ const JudgeAgentEdit = () => {
               {isNew ? 'Create Judge Agent' : 'Edit Judge Agent'}
             </h1>
           </div>
-          <Button size="sm" onClick={handleSave}>
-            Save
+          <Button size="sm" onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+            {createMutation.isPending || updateMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </div>
@@ -73,7 +113,32 @@ const JudgeAgentEdit = () => {
               className="max-w-md min-h-20"
             />
           </div>
-
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="model">Model</Label>
+              <Input
+                id="model"
+                placeholder="e.g., gpt-4.1-mini"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="temperature">Temperature</Label>
+              <Input
+                id="temperature"
+                type="number"
+                step="0.1"
+                min="0"
+                max="2"
+                placeholder="0.5"
+                value={temperature}
+                onChange={(e) => setTemperature(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="prompt">Judge Prompt</Label>
             <p className="text-xs text-muted-foreground">

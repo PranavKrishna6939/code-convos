@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Project } from '@/types/judge';
-import { dummyConversations } from '@/data/dummyData';
+import { api } from '@/lib/api';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ImportProjectModalProps {
   open: boolean;
@@ -16,31 +17,40 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
   const [apiKey, setApiKey] = useState('');
   const [projectName, setProjectName] = useState('');
   const [numConversations, setNumConversations] = useState('10');
+  const [outcomes, setOutcomes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   const handleImport = async () => {
     if (!apiKey || !projectName || !numConversations) return;
 
     setIsLoading(true);
     
-    // Simulate API call - in production this would call:
-    // GET https://api.hoomanlabs.com/routes/v1/conversations/?type=call&direction=outbound&limit={{N}}
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const newProject: Project = {
-      id: Date.now().toString(),
-      name: projectName,
-      conversations: dummyConversations.slice(0, parseInt(numConversations)),
-      api_key: apiKey
-    };
-
-    setIsLoading(false);
-    onImport(newProject);
-    
-    // Reset form
-    setApiKey('');
-    setProjectName('');
-    setNumConversations('10');
+    try {
+      const outcomeArray = outcomes.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      const newProject = await api.importProject(apiKey, projectName, parseInt(numConversations), outcomeArray);
+      onImport(newProject);
+      
+      // Reset form
+      setApiKey('');
+      setProjectName('');
+      setNumConversations('10');
+      setOutcomes('');
+      
+      toast({
+        title: "Success",
+        description: "Project imported successfully",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Failed to import project. Please check your API key.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -82,6 +92,16 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
               max="100"
               value={numConversations}
               onChange={(e) => setNumConversations(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="outcomes">Outcomes (comma separated)</Label>
+            <Input
+              id="outcomes"
+              placeholder="e.g., completed, no_answer"
+              value={outcomes}
+              onChange={(e) => setOutcomes(e.target.value)}
             />
           </div>
         </div>
