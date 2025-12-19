@@ -212,24 +212,37 @@ const ProjectDetail = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Conversation List */}
         <div className="w-48 border-r border-border overflow-y-auto">
-          {filteredConversations.map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => {
-                setSelectedConvId(conv.id);
-                setSelectedTurnIndex(null);
-              }}
-              className={cn(
-                "px-3 py-2 border-b border-border cursor-pointer text-sm",
-                selectedConvId === conv.id 
-                  ? "bg-muted" 
-                  : "hover:bg-muted/50"
-              )}
-            >
-              <span className="font-mono text-muted-foreground truncate block" title={conv.id}>{conv.id}</span>
-              <span className="text-xs text-muted-foreground block mt-1 truncate">{conv.outcome}</span>
-            </div>
-          ))}
+          {filteredConversations.map((conv) => {
+            const hasErrors = conv.turn_errors && Object.keys(conv.turn_errors).length > 0;
+            const isSelected = selectedConvId === conv.id;
+            
+            return (
+              <div
+                key={conv.id}
+                onClick={() => {
+                  setSelectedConvId(conv.id);
+                  setSelectedTurnIndex(null);
+                }}
+                className={cn(
+                  "px-3 py-2 border-b border-border cursor-pointer text-sm",
+                  isSelected
+                    ? "bg-black" 
+                    : hasErrors
+                      ? "bg-destructive/10 hover:bg-destructive/20"
+                      : "hover:bg-muted/50"
+                )}
+              >
+                <span className={cn(
+                  "font-mono truncate block",
+                  isSelected ? "text-white" : "text-muted-foreground"
+                )} title={conv.id}>{conv.id}</span>
+                <span className={cn(
+                  "text-xs block mt-1 truncate",
+                  isSelected ? "text-gray-400" : "text-muted-foreground"
+                )}>{conv.outcome}</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Center: Conversation View */}

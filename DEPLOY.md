@@ -49,7 +49,7 @@ cd /home/ubuntu/code-convos
 Start the backend using PM2. It is configured to serve the API on `/api` and the frontend on `/`.
 
 ```bash
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup
 ```
