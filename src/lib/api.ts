@@ -34,6 +34,30 @@ export const api = {
     return res.json();
   },
 
+  duplicateProject: async (id: string): Promise<Project> => {
+    const res = await fetch(`${API_BASE}/projects/${id}/duplicate`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to duplicate project');
+    return res.json();
+  },
+
+  deleteAllLabels: async (projectId: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/labels`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete all labels');
+    return res.json();
+  },
+
+  deleteLabel: async (projectId: string, convId: string, turnIndex: number, label: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/conversations/${convId}/turns/${turnIndex}/labels/${encodeURIComponent(label)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete label');
+    return res.json();
+  },
+
   // Judges
   getJudges: async (): Promise<JudgeAgent[]> => {
     const res = await fetch(`${API_BASE}/judges`);

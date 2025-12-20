@@ -208,6 +208,70 @@ app.delete('/api/projects/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// Duplicate Project
+app.post('/api/projects/:id/duplicate', (req, res) => {
+  const project = db.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  // Create new project with conversations but reset turn_errors
+  const duplicatedConversations = project.conversations.map(conv => ({
+    ...conv,
+    turn_errors: {} // Reset all labels
+  }));
+
+  const newProject = {
+    id: Date.now().toString(),
+    name: `${project.name} (Copy)`,
+    api_key: project.api_key,
+    conversations: duplicatedConversations
+  };
+
+  db.projects.push(newProject);
+  saveDb();
+  res.json(newProject);
+});
+
+// Delete all labels in a project
+app.delete('/api/projects/:id/labels', (req, res) => {
+  const project = db.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  // Reset turn_errors for all conversations
+  project.conversations.forEach(conv => {
+    conv.turn_errors = {};
+  });
+
+  saveDb();
+  res.json({ success: true, message: 'All labels deleted' });
+});
+
+// Delete individual label from a specific turn
+app.delete('/api/projects/:projectId/conversations/:convId/turns/:turnIndex/labels/:label', (req, res) => {
+  const { projectId, convId, turnIndex, label } = req.params;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const conversation = project.conversations.find(c => c.id === convId);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+  const turn = parseInt(turnIndex);
+  if (conversation.turn_errors[turn]) {
+    const errorIdx = conversation.turn_errors[turn].findIndex(e => e.label === label);
+    if (errorIdx >= 0) {
+      conversation.turn_errors[turn].splice(errorIdx, 1);
+      
+      // Clean up empty turn_errors
+      if (conversation.turn_errors[turn].length === 0) {
+        delete conversation.turn_errors[turn];
+      }
+    }
+  }
+
+  saveDb();
+  res.json({ success: true, message: 'Label deleted' });
+});
+
 // Judges
 app.get('/api/judges', (req, res) => {
   res.json(db.judges);

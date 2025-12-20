@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play } from 'lucide-react';
+import { ArrowLeft, Play, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -102,6 +102,34 @@ const ProjectDetail = () => {
     }
   });
 
+  const deleteAllLabelsMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectId) return;
+      return api.deleteAllLabels(projectId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast({ title: "Success", description: "All labels deleted" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete labels", variant: "destructive" });
+    }
+  });
+
+  const deleteLabelMutation = useMutation({
+    mutationFn: async ({ convId, turnIndex, label }: { convId: string, turnIndex: number, label: string }) => {
+      if (!projectId) return;
+      return api.deleteLabel(projectId, convId, turnIndex, label);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast({ title: "Success", description: "Label deleted" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete label", variant: "destructive" });
+    }
+  });
+
   const handleRunJudge = () => {
     if (selectedConvId) {
       runJudgeMutation.mutate({ convId: selectedConvId });
@@ -134,6 +162,17 @@ const ProjectDetail = () => {
 
   const handleUpdateReason = (turnIndex: number, label: string, newReason: string) => {
     updateReasonMutation.mutate({ turnIndex, label, reason: newReason });
+  };
+
+  const handleDeleteAllLabels = () => {
+    if (confirm('Are you sure you want to delete all labels from this project?')) {
+      deleteAllLabelsMutation.mutate();
+    }
+  };
+
+  const handleDeleteLabel = (turnIndex: number, label: string) => {
+    if (!selectedConvId) return;
+    deleteLabelMutation.mutate({ convId: selectedConvId, turnIndex, label });
   };
 
   if (isProjectLoading) {
@@ -204,6 +243,15 @@ const ProjectDetail = () => {
             disabled={!selectedJudge || isBatchRunning || filteredConversations.length === 0}
           >
             {isBatchRunning ? 'Running All...' : `Run All (${filteredConversations.length})`}
+          </Button>
+          <div className="h-4 w-px bg-border mx-2" />
+          <Button 
+            size="sm" 
+            variant="destructive" 
+            onClick={handleDeleteAllLabels}
+          >
+            <Trash2 className="w-3 h-3 mr-1" />
+            Clear Labels
           </Button>
         </div>
       </div>
@@ -313,7 +361,17 @@ const ProjectDetail = () => {
                   <div className="space-y-3 h-full flex flex-col">
                     {currentTurnErrors.map((error, idx) => (
                       <div key={`${selectedTurnIndex}-${error.label}`} className="space-y-1 flex-1 flex flex-col">
-                        <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleDeleteLabel(selectedTurnIndex, error.label)}
+                          >
+                            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        </div>
                         <Textarea
                           defaultValue={error.edited_reason ?? error.original_reason}
                           onBlur={(e) => handleUpdateReason(selectedTurnIndex, error.label, e.target.value)}
