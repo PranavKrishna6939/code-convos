@@ -6,6 +6,9 @@ export interface JudgeAgent {
   prompt: string;
   model?: string;
   temperature?: number;
+  provider?: string;
+  judge_type?: 'single' | 'multi'; // single-label or multi-label judge
+  labels_schema?: Record<string, { type: string; description: string; enum?: string[] }>; // for multi-label judges
 }
 
 export interface JudgeResult {

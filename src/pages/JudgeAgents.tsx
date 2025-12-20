@@ -1,16 +1,34 @@
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 const JudgeAgents = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   const { data: agents = [] } = useQuery({
     queryKey: ['judges'],
     queryFn: api.getJudges
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteJudge(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['judges'] });
+      toast({ title: "Success", description: "Judge agent deleted" });
+    }
+  });
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm('Are you sure you want to delete this judge agent?')) {
+      deleteMutation.mutate(id);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -40,6 +58,7 @@ const JudgeAgents = () => {
                 <tr>
                   <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Label Name</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Description</th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground w-20">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -51,6 +70,16 @@ const JudgeAgents = () => {
                   >
                     <td className="px-4 py-3 text-sm font-mono text-foreground">{agent.label_name}</td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{agent.description}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => handleDelete(e, agent.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

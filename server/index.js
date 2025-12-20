@@ -286,14 +286,17 @@ app.get('/api/judges/:id', (req, res) => {
 });
 
 app.post('/api/judges', (req, res) => {
-  const { label_name, description, prompt, model, temperature } = req.body;
+  const { label_name, description, prompt, model, temperature, provider, judge_type, labels_schema } = req.body;
   const newJudge = {
     id: Date.now().toString(),
     label_name,
     description,
     prompt,
     model: model || 'gpt-4.1-mini',
-    temperature: temperature !== undefined ? temperature : 0.5
+    temperature: temperature !== undefined ? temperature : 0.5,
+    provider: provider || 'openai',
+    judge_type: judge_type || 'single',
+    labels_schema: labels_schema || undefined
   };
   db.judges.push(newJudge);
   saveDb();
@@ -301,7 +304,7 @@ app.post('/api/judges', (req, res) => {
 });
 
 app.put('/api/judges/:id', (req, res) => {
-  const { label_name, description, prompt, model, temperature } = req.body;
+  const { label_name, description, prompt, model, temperature, provider, judge_type, labels_schema } = req.body;
   const idx = db.judges.findIndex(j => j.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Judge not found' });
 
@@ -311,10 +314,22 @@ app.put('/api/judges/:id', (req, res) => {
     description, 
     prompt,
     model: model || db.judges[idx].model || 'gpt-4.1-mini',
-    temperature: temperature !== undefined ? temperature : (db.judges[idx].temperature !== undefined ? db.judges[idx].temperature : 0.5)
+    temperature: temperature !== undefined ? temperature : (db.judges[idx].temperature !== undefined ? db.judges[idx].temperature : 0.5),
+    provider: provider || db.judges[idx].provider || 'openai',
+    judge_type: judge_type || db.judges[idx].judge_type || 'single',
+    labels_schema: labels_schema !== undefined ? labels_schema : db.judges[idx].labels_schema
   };
   saveDb();
   res.json(db.judges[idx]);
+});
+
+app.delete('/api/judges/:id', (req, res) => {
+  const idx = db.judges.findIndex(j => j.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Judge not found' });
+  
+  db.judges.splice(idx, 1);
+  saveDb();
+  res.json({ success: true });
 });
 
 // Run Judge
@@ -357,22 +372,42 @@ app.post('/api/run-judge', async (req, res) => {
         return { role: m.role, content: m.content };
     });
 
-    const payload = {
-      config: {
-        provider: "openai",
-        model: judge.model || "gpt-4.1-mini", 
-        temperature: judge.temperature !== undefined ? judge.temperature : 0.5
-      },
-      prompt: judge.prompt,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({ 
-            llmHistory: formattedHistory
-          })
-        }
-      ],
-      tool: {
+    // Build tool schema based on judge type
+    let tool;
+    if (judge.judge_type === 'multi' && judge.labels_schema) {
+      // Multi-label judge: each label is a top-level property
+      const properties = {};
+      const required = [];
+      
+      for (const [labelKey, labelDef] of Object.entries(judge.labels_schema)) {
+        properties[labelKey] = {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              turn_index: { type: "number" },
+              value: { 
+                type: labelDef.type,
+                ...(labelDef.enum ? { enum: labelDef.enum } : {})
+              },
+              reason: { type: "string" }
+            },
+            required: ["turn_index", "value", "reason"]
+          },
+          description: labelDef.description
+        };
+        required.push(labelKey);
+      }
+      
+      tool = {
+        name: "multi_label_extraction",
+        description: "Extract multiple labels from assistant turns.",
+        properties,
+        required
+      };
+    } else {
+      // Single-label judge: traditional format
+      tool = {
         name: "judge_evaluation",
         description: "Judge assistant turns for the specified error label.",
         properties: {
@@ -391,7 +426,25 @@ app.post('/api/run-judge', async (req, res) => {
           }
         },
         required: ["label", "error_detected", "error_turns"]
-      }
+      };
+    }
+
+    const payload = {
+      config: {
+        provider: judge.provider || "openai",
+        model: judge.model || "gpt-4.1-mini", 
+        temperature: judge.temperature !== undefined ? judge.temperature : 0.5
+      },
+      prompt: judge.prompt,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify({ 
+            llmHistory: formattedHistory
+          })
+        }
+      ],
+      tool
     };
 
     const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
@@ -421,16 +474,46 @@ app.post('/api/run-judge', async (req, res) => {
         evaluation = evaluation.message;
     }
     
-    // Update conversation errors
-    if (evaluation && evaluation.error_detected && evaluation.error_turns) {
+    // Update conversation errors based on judge type
+    if (judge.judge_type === 'multi' && judge.labels_schema) {
+      // Multi-label judge: iterate through each label in the schema
+      for (const labelKey of Object.keys(judge.labels_schema)) {
+        const labelResults = evaluation[labelKey];
+        if (labelResults && Array.isArray(labelResults)) {
+          labelResults.forEach(result => {
+            const turnIndex = result.turn_index;
+            
+            if (!conversation.turn_errors[turnIndex]) {
+              conversation.turn_errors[turnIndex] = [];
+            }
+            
+            // For multi-label, use labelKey as the label name
+            const existingErrorIdx = conversation.turn_errors[turnIndex].findIndex(e => e.label === labelKey);
+            
+            const newError = {
+              label: labelKey,
+              original_reason: result.reason,
+              edited_reason: null,
+              value: result.value // Store the extracted value for multi-label
+            };
+            
+            if (existingErrorIdx >= 0) {
+              conversation.turn_errors[turnIndex][existingErrorIdx] = newError;
+            } else {
+              conversation.turn_errors[turnIndex].push(newError);
+            }
+          });
+        }
+      }
+    } else if (evaluation && evaluation.error_detected && evaluation.error_turns) {
+      // Single-label judge: traditional format
       evaluation.error_turns.forEach(error => {
-        // We trust the LLM to return the correct turn index because we explicitly numbered them in the input.
         const turnIndex = error.turn_index;
 
         if (!conversation.turn_errors[turnIndex]) {
           conversation.turn_errors[turnIndex] = [];
         }
-        // Check if error already exists for this label
+        
         const existingErrorIdx = conversation.turn_errors[turnIndex].findIndex(e => e.label === judge.label_name);
         
         const newError = {

@@ -91,6 +91,14 @@ export const api = {
     return res.json();
   },
 
+  deleteJudge: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/judges/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete judge');
+    return res.json();
+  },
+
   // Evaluations
   runJudge: async (projectId: string, conversationId: string, judgeId: string, progress?: { current: number, total: number }) => {
     const res = await fetch(`${API_BASE}/run-judge`, {
