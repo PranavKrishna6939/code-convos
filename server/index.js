@@ -76,21 +76,55 @@ app.post('/api/projects', async (req, res) => {
 
     console.log('API Response Status:', response.status);
     console.log('API Response Data Type:', typeof response.data);
-    if (typeof response.data === 'object' && response.data !== null) {
-        console.log('API Response Keys:', Object.keys(response.data));
+    
+    if (response.data) {
+        try {
+            const preview = JSON.stringify(response.data).substring(0, 200);
+            console.log('API Response Preview:', preview);
+        } catch (e) {
+            console.log('Could not stringify response data');
+        }
     }
 
     let rawConversations = [];
+    
     if (Array.isArray(response.data)) {
+        console.log('Format: Root Array');
         rawConversations = response.data;
-    } else if (response.data && Array.isArray(response.data.conversations)) {
-        rawConversations = response.data.conversations;
-    } else if (response.data && Array.isArray(response.data.items)) {
-        rawConversations = response.data.items;
-    } else if (response.data && Array.isArray(response.data.data)) {
-        rawConversations = response.data.data;
-    } else if (response.data && Array.isArray(response.data.results)) {
-        rawConversations = response.data.results;
+    } else if (typeof response.data === 'object') {
+        const keys = Object.keys(response.data);
+        console.log('Format: Object with keys:', keys);
+
+        if (Array.isArray(response.data.data)) {
+            console.log('Format: .data Array');
+            rawConversations = response.data.data;
+        } else if (Array.isArray(response.data.conversations)) {
+            console.log('Format: .conversations Array');
+            rawConversations = response.data.conversations;
+        } else if (Array.isArray(response.data.items)) {
+            console.log('Format: .items Array');
+            rawConversations = response.data.items;
+        } else if (Array.isArray(response.data.results)) {
+            console.log('Format: .results Array');
+            rawConversations = response.data.results;
+        } else {
+            console.log('No standard array property found. Searching all keys...');
+            // Fallback: Search for any array in the object
+            for (const key of keys) {
+                if (Array.isArray(response.data[key])) {
+                    console.log(`Found array in key: '${key}' with length ${response.data[key].length}`);
+                    rawConversations = response.data[key];
+                    break;
+                }
+            }
+            
+            if (rawConversations.length === 0 && response.data.data) {
+                console.log('response.data.data exists but was not accepted.');
+                console.log('Type:', typeof response.data.data);
+                console.log('Is Array?', Array.isArray(response.data.data));
+                console.log('Value preview:', JSON.stringify(response.data.data).substring(0, 100));
+            }
+        }
     }
 
     console.log(`Found ${rawConversations.length} conversations`);
