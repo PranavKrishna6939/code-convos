@@ -61,12 +61,14 @@ app.post('/api/projects', async (req, res) => {
 
   try {
     console.log(`Fetching ${limit} conversations...`);
-    let url = `https://api.hoomanlabs.com/routes/v1/conversations/?type=call&direction=outbound&limit=${limit}`;
+    let url = `https://api.hoomanlabs.com/routes/v1/conversations/?limit=${limit}`;
     
     if (outcomes && Array.isArray(outcomes) && outcomes.length > 0) {
       const outcomeQuery = outcomes.map(o => `outcome=${encodeURIComponent(o)}`).join('&');
       url += `&${outcomeQuery}`;
     }
+    
+    console.log('API URL:', url);
 
     const response = await axios.get(url, {
       headers: {
