@@ -134,10 +134,12 @@ app.post('/api/projects', async (req, res) => {
 
       // Priority 1: llmHistory
       if (c.llmHistory && Array.isArray(c.llmHistory)) {
-        messages = c.llmHistory.map(m => ({
-          role: m.role,
-          content: m.content || (m.args ? JSON.stringify(m.args) : '') // Handle tool calls
-        }));
+        messages = c.llmHistory
+          .filter(m => m.role === 'user' || m.role === 'assistant') // Filter out tool-call/tool-response
+          .map(m => ({
+            role: m.role,
+            content: m.content || (m.args ? JSON.stringify(m.args) : '') // Handle tool calls
+          }));
       } 
       // Priority 2: messages
       else if (c.messages && Array.isArray(c.messages)) {
