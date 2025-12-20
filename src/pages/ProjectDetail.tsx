@@ -4,11 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
+import { AnalyticsDialog } from '@/components/AnalyticsDialog';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
@@ -32,6 +33,9 @@ const ProjectDetail = () => {
   const [selectedJudge, setSelectedJudge] = useState<string>('');
   const [outcomeFilter, setOutcomeFilter] = useState<string>('all');
   const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [manualLabelInput, setManualLabelInput] = useState<Record<number, string[]>>({});
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   // Set initial selected conversation
   useEffect(() => {
@@ -130,6 +134,26 @@ const ProjectDetail = () => {
     }
   });
 
+  const updateManualLabelsMutation = useMutation({
+    mutationFn: async ({ convId, turnIndex, labels }: { convId: string, turnIndex: number, labels: string[] }) => {
+      if (!projectId) return;
+      return api.updateManualLabels(projectId, convId, turnIndex, labels);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    }
+  });
+
+  const markLabelledMutation = useMutation({
+    mutationFn: async ({ convId, labelled }: { convId: string, labelled: boolean }) => {
+      if (!projectId) return;
+      return api.markManuallyLabelled(projectId, convId, labelled);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    }
+  });
+
   const handleRunJudge = () => {
     if (selectedConvId) {
       runJudgeMutation.mutate({ convId: selectedConvId });
@@ -175,6 +199,51 @@ const ProjectDetail = () => {
     deleteLabelMutation.mutate({ convId: selectedConvId, turnIndex, label });
   };
 
+  const handleStartManualMode = () => {
+    // Load first unlabelled conversation, then labelled ones
+    const unlabelled = filteredConversations.find(c => !c.manually_labelled);
+    if (unlabelled) {
+      setSelectedConvId(unlabelled.id);
+    } else if (filteredConversations.length > 0) {
+      setSelectedConvId(filteredConversations[0].id);
+    }
+    setIsManualMode(true);
+    setManualLabelInput({});
+  };
+
+  const handleManualLabelConv = (convId: string) => {
+    setSelectedConvId(convId);
+    setIsManualMode(true);
+    setManualLabelInput({});
+  };
+
+  const handleToggleManualLabel = (turnIndex: number, label: string) => {
+    if (!selectedConvId || !selectedConversation) return;
+    
+    const currentLabels = selectedConversation.manual_labels?.[turnIndex] || [];
+    const newLabels = currentLabels.includes(label)
+      ? currentLabels.filter(l => l !== label)
+      : [...currentLabels, label];
+    
+    updateManualLabelsMutation.mutate({ convId: selectedConvId, turnIndex, labels: newLabels });
+  };
+
+  const handleMarkLabelled = () => {
+    if (!selectedConvId) return;
+    markLabelledMutation.mutate({ convId: selectedConvId, labelled: true });
+    toast({ title: "Success", description: "Conversation marked as labelled" });
+    
+    // Move to next unlabelled conversation
+    const currentIdx = filteredConversations.findIndex(c => c.id === selectedConvId);
+    const nextUnlabelled = filteredConversations.slice(currentIdx + 1).find(c => !c.manually_labelled);
+    if (nextUnlabelled) {
+      setSelectedConvId(nextUnlabelled.id);
+    } else {
+      setIsManualMode(false);
+      toast({ title: "Complete", description: "All conversations labelled!" });
+    }
+  };
+
   if (isProjectLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
@@ -202,57 +271,95 @@ const ProjectDetail = () => {
           <span className="text-sm font-medium text-foreground">{project.name}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
-            <SelectTrigger className="w-32 h-8 text-sm">
-              <SelectValue placeholder="Filter Outcome" />
-            </SelectTrigger>
-            <SelectContent>
-              {outcomes.map(outcome => (
-                <SelectItem key={outcome} value={outcome}>
-                  {outcome === 'all' ? 'All Outcomes' : outcome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="h-4 w-px bg-border mx-2" />
-          <Select value={selectedJudge} onValueChange={setSelectedJudge}>
-            <SelectTrigger className="w-48 h-8 text-sm">
-              <SelectValue placeholder="Select judge..." />
-            </SelectTrigger>
-            <SelectContent>
-              {judges.map(judge => (
-                <SelectItem key={judge.id} value={judge.id}>
-                  {judge.label_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={handleRunJudge} 
-            disabled={!selectedJudge || runJudgeMutation.isPending || isBatchRunning}
-          >
-            <Play className="w-3 h-3 mr-1" />
-            Run
-          </Button>
-          <Button 
-            size="sm" 
-            variant="default" 
-            onClick={handleRunAllFiltered} 
-            disabled={!selectedJudge || isBatchRunning || filteredConversations.length === 0}
-          >
-            {isBatchRunning ? 'Running All...' : `Run All (${filteredConversations.length})`}
-          </Button>
-          <div className="h-4 w-px bg-border mx-2" />
-          <Button 
-            size="sm" 
-            variant="destructive" 
-            onClick={handleDeleteAllLabels}
-          >
-            <Trash2 className="w-3 h-3 mr-1" />
-            Clear Labels
-          </Button>
+          {isManualMode ? (
+            <>
+              <Button 
+                size="sm" 
+                variant="default"
+                onClick={handleMarkLabelled}
+                disabled={!selectedConvId}
+              >
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                Mark as Labelled
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setIsManualMode(false)}
+              >
+                Exit Manual Mode
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleStartManualMode}
+              >
+                Start Manual Labeling
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setAnalyticsOpen(true)}
+              >
+                <BarChart3 className="w-3 h-3 mr-1" />
+                Analytics
+              </Button>
+              <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+                <SelectTrigger className="w-32 h-8 text-sm">
+                  <SelectValue placeholder="Filter Outcome" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outcomes.map(outcome => (
+                    <SelectItem key={outcome} value={outcome}>
+                      {outcome === 'all' ? 'All Outcomes' : outcome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="h-4 w-px bg-border mx-2" />
+              <Select value={selectedJudge} onValueChange={setSelectedJudge}>
+                <SelectTrigger className="w-48 h-8 text-sm">
+                  <SelectValue placeholder="Select judge..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {judges.map(judge => (
+                    <SelectItem key={judge.id} value={judge.id}>
+                      {judge.label_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={handleRunJudge} 
+                disabled={!selectedJudge || runJudgeMutation.isPending || isBatchRunning}
+              >
+                <Play className="w-3 h-3 mr-1" />
+                Run
+              </Button>
+              <Button 
+                size="sm" 
+                variant="default" 
+                onClick={handleRunAllFiltered} 
+                disabled={!selectedJudge || isBatchRunning || filteredConversations.length === 0}
+              >
+                {isBatchRunning ? 'Running All...' : `Run All (${filteredConversations.length})`}
+              </Button>
+              <div className="h-4 w-px bg-border mx-2" />
+              <Button 
+                size="sm" 
+                variant="destructive" 
+                onClick={handleDeleteAllLabels}
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Clear Labels
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -263,6 +370,7 @@ const ProjectDetail = () => {
           {filteredConversations.map((conv) => {
             const hasErrors = conv.turn_errors && Object.keys(conv.turn_errors).length > 0;
             const isSelected = selectedConvId === conv.id;
+            const isManuallyLabelled = conv.manually_labelled;
             
             return (
               <div
@@ -271,8 +379,12 @@ const ProjectDetail = () => {
                   setSelectedConvId(conv.id);
                   setSelectedTurnIndex(null);
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleManualLabelConv(conv.id);
+                }}
                 className={cn(
-                  "px-3 py-2 border-b border-border cursor-pointer text-sm",
+                  "px-3 py-2 border-b border-border cursor-pointer text-sm relative",
                   isSelected
                     ? "bg-black" 
                     : hasErrors
@@ -280,8 +392,14 @@ const ProjectDetail = () => {
                       : "hover:bg-muted/50"
                 )}
               >
+                {isManuallyLabelled && (
+                  <CheckCircle2 className={cn(
+                    "absolute top-2 right-2 h-3 w-3",
+                    isSelected ? "text-green-400" : "text-green-600"
+                  )} />
+                )}
                 <span className={cn(
-                  "font-mono truncate block",
+                  "font-mono truncate block pr-5",
                   isSelected ? "text-white" : "text-muted-foreground"
                 )} title={conv.id}>{conv.id}</span>
                 <span className={cn(
@@ -354,67 +472,107 @@ const ProjectDetail = () => {
         <div className="w-80 border-l border-border flex flex-col bg-background">
           {selectedTurnIndex !== null ? (
             <>
-              {/* Top: Open Codes (Flexible, takes remaining space) */}
-              <div className="flex-1 overflow-y-auto p-4 min-h-0">
-                <h3 className="text-sm font-medium text-foreground mb-2">Open Codes</h3>
-                {currentTurnErrors.length > 0 ? (
-                  <div className="space-y-3 h-full flex flex-col">
-                    {currentTurnErrors.map((error, idx) => (
-                      <div key={`${selectedTurnIndex}-${error.label}`} className="space-y-1 flex-1 flex flex-col">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleDeleteLabel(selectedTurnIndex, error.label)}
-                          >
-                            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                          </Button>
-                        </div>
-                        <Textarea
-                          defaultValue={error.edited_reason ?? error.original_reason}
-                          onBlur={(e) => handleUpdateReason(selectedTurnIndex, error.label, e.target.value)}
-                          className="text-sm font-mono flex-1 min-h-[150px] resize-none"
-                        />
-                      </div>
-                    ))}
+              {isManualMode ? (
+                /* Manual Labeling Mode */
+                <div className="flex-1 overflow-y-auto p-4">
+                  <h3 className="text-sm font-medium text-foreground mb-2">
+                    Manual Labels - Turn {selectedTurnIndex}
+                  </h3>
+                  <div className="text-xs text-muted-foreground mb-4">
+                    Click labels to toggle for this assistant turn
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No errors flagged for this turn</p>
-                )}
-              </div>
-
-              {/* Bottom: Axial Codes (Fixed height, pinned to bottom) */}
-              <div className="h-[400px] border-t border-border p-4 overflow-y-auto bg-muted/5">
-                <h3 className="text-sm font-medium text-foreground mb-2">Axial Codes (Labels)</h3>
-                <div className="space-y-2">
-                  {judges.map(judge => {
-                    const isAssigned = currentTurnErrors.some(e => e.label === judge.label_name);
-                    return (
-                      <div 
-                        key={judge.id}
-                        className={cn(
-                          "p-2 rounded border text-sm",
-                          isAssigned 
-                            ? "bg-destructive/10 border-destructive/30" 
-                            : "bg-muted/30 border-border"
-                        )}
-                      >
-                        <div className="font-mono text-foreground">{judge.label_name}</div>
-                        <div className="text-xs text-muted-foreground">{judge.description}</div>
-                        <div className="text-xs mt-1">
-                          {isAssigned ? (
-                            <span className="text-destructive">Assigned</span>
-                          ) : (
-                            <span className="text-muted-foreground">Not Assigned</span>
+                  <div className="space-y-2">
+                    {judges.map(judge => {
+                      const manualLabels = selectedConversation?.manual_labels?.[selectedTurnIndex] || [];
+                      const isAssigned = manualLabels.includes(judge.label_name);
+                      
+                      return (
+                        <div 
+                          key={judge.id}
+                          onClick={() => handleToggleManualLabel(selectedTurnIndex, judge.label_name)}
+                          className={cn(
+                            "p-2 rounded border text-sm cursor-pointer transition-colors",
+                            isAssigned 
+                              ? "bg-primary text-primary-foreground border-primary" 
+                              : "bg-muted/30 border-border hover:bg-muted/50"
                           )}
+                        >
+                          <div className="font-mono">{judge.label_name}</div>
+                          <div className={cn(
+                            "text-xs mt-1",
+                            isAssigned ? "text-primary-foreground/80" : "text-muted-foreground"
+                          )}>{judge.description}</div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Normal LLM Judge Mode */
+                <>
+                  {/* Top: Open Codes (Flexible, takes remaining space) */}
+                  <div className="flex-1 overflow-y-auto p-4 min-h-0">
+                    <h3 className="text-sm font-medium text-foreground mb-2">Open Codes</h3>
+                    {currentTurnErrors.length > 0 ? (
+                      <div className="space-y-3 h-full flex flex-col">
+                        {currentTurnErrors.map((error, idx) => (
+                          <div key={`${selectedTurnIndex}-${error.label}`} className="space-y-1 flex-1 flex flex-col">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => handleDeleteLabel(selectedTurnIndex, error.label)}
+                              >
+                                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                            </div>
+                            <Textarea
+                              defaultValue={error.edited_reason ?? error.original_reason}
+                              onBlur={(e) => handleUpdateReason(selectedTurnIndex, error.label, e.target.value)}
+                              className="text-sm font-mono flex-1 min-h-[150px] resize-none"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No errors flagged for this turn</p>
+                    )}
+                  </div>
+
+                  {/* Bottom: Axial Codes (Fixed height, pinned to bottom) */}
+                  <div className="h-[400px] border-t border-border p-4 overflow-y-auto bg-muted/5">
+                    <h3 className="text-sm font-medium text-foreground mb-2">Axial Codes (Labels)</h3>
+                    <div className="space-y-2">
+                      {judges.map(judge => {
+                        const isAssigned = currentTurnErrors.some(e => e.label === judge.label_name);
+                        return (
+                          <div 
+                            key={judge.id}
+                            className={cn(
+                              "p-2 rounded border text-sm",
+                              isAssigned 
+                                ? "bg-destructive/10 border-destructive/30" 
+                                : "bg-muted/30 border-border"
+                            )}
+                          >
+                            <div className="font-mono text-foreground">{judge.label_name}</div>
+                            <div className="text-xs text-muted-foreground">{judge.description}</div>
+                            <div className="text-xs mt-1">
+                              {isAssigned ? (
+                                <span className="text-destructive">Assigned</span>
+                              ) : (
+                                <span className="text-muted-foreground">Not Assigned</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-sm">
@@ -423,6 +581,13 @@ const ProjectDetail = () => {
           )}
         </div>
       </div>
+
+      {/* Analytics Dialog */}
+      <AnalyticsDialog 
+        projectId={projectId || ''} 
+        open={analyticsOpen} 
+        onOpenChange={setAnalyticsOpen} 
+      />
     </div>
   );
 };

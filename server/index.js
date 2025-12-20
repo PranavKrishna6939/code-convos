@@ -213,10 +213,12 @@ app.post('/api/projects/:id/duplicate', (req, res) => {
   const project = db.projects.find(p => p.id === req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  // Create new project with conversations but reset turn_errors
+  // Create new project with conversations, reset LLM labels but keep manual labels
   const duplicatedConversations = project.conversations.map(conv => ({
     ...conv,
-    turn_errors: {} // Reset all labels
+    turn_errors: {}, // Reset LLM labels
+    manual_labels: conv.manual_labels ? { ...conv.manual_labels } : undefined, // Copy manual labels
+    manually_labelled: conv.manually_labelled || false
   }));
 
   const newProject = {
@@ -477,6 +479,99 @@ app.post('/api/evaluations', (req, res) => {
   error.edited_reason = editedReason;
   saveDb();
   res.json({ success: true });
+});
+
+// Manual Labeling Routes
+app.post('/api/projects/:projectId/conversations/:convId/manual-labels', (req, res) => {
+  const { projectId, convId } = req.params;
+  const { turnIndex, labels } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const conversation = project.conversations.find(c => c.id === convId);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+  // Initialize manual_labels if it doesn't exist
+  if (!conversation.manual_labels) {
+    conversation.manual_labels = {};
+  }
+
+  conversation.manual_labels[turnIndex] = labels;
+  saveDb();
+  res.json({ success: true });
+});
+
+app.post('/api/projects/:projectId/conversations/:convId/mark-labelled', (req, res) => {
+  const { projectId, convId } = req.params;
+  const { labelled } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const conversation = project.conversations.find(c => c.id === convId);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+  conversation.manually_labelled = labelled;
+  saveDb();
+  res.json({ success: true });
+});
+
+// Recall Analytics
+app.get('/api/projects/:projectId/analytics/recall', (req, res) => {
+  const { projectId } = req.params;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  // Calculate recall for each label
+  // Recall = True Positives / (True Positives + False Negatives)
+  // TP = LLM detected and manual label exists
+  // FN = Manual label exists but LLM didn't detect
+
+  const labelRecall = {};
+
+  project.conversations.forEach(conv => {
+    if (!conv.manually_labelled || !conv.manual_labels) return;
+
+    // Get all assistant turns
+    let turnIndex = 0;
+    conv.messages.forEach((msg, idx) => {
+      if (msg.role === 'assistant') {
+        const manualLabels = conv.manual_labels[turnIndex] || [];
+        const llmErrors = conv.turn_errors[turnIndex] || [];
+
+        manualLabels.forEach(label => {
+          if (!labelRecall[label]) {
+            labelRecall[label] = { tp: 0, fn: 0, total: 0 };
+          }
+
+          labelRecall[label].total++;
+
+          // Check if LLM detected this label
+          const llmDetected = llmErrors.some(e => e.label === label);
+          if (llmDetected) {
+            labelRecall[label].tp++;
+          } else {
+            labelRecall[label].fn++;
+          }
+        });
+
+        turnIndex++;
+      }
+    });
+  });
+
+  // Calculate recall percentages
+  const analytics = Object.entries(labelRecall).map(([label, stats]) => ({
+    label,
+    recall: stats.total > 0 ? (stats.tp / stats.total) * 100 : 0,
+    truePositives: stats.tp,
+    falseNegatives: stats.fn,
+    totalManualLabels: stats.total
+  }));
+
+  res.json({ analytics });
 });
 
 // Serve static files from the React app

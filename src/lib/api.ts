@@ -110,5 +110,33 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to update evaluation');
     return res.json();
-  }
+  },
+
+  // Manual Labeling
+  updateManualLabels: async (projectId: string, conversationId: string, turnIndex: number, labels: string[]) => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/conversations/${conversationId}/manual-labels`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turnIndex, labels }),
+    });
+    if (!res.ok) throw new Error('Failed to update manual labels');
+    return res.json();
+  },
+
+  markManuallyLabelled: async (projectId: string, conversationId: string, labelled: boolean) => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/conversations/${conversationId}/mark-labelled`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labelled }),
+    });
+    if (!res.ok) throw new Error('Failed to mark conversation');
+    return res.json();
+  },
+
+  // Analytics
+  getRecallAnalytics: async (projectId: string) => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/analytics/recall`);
+    if (!res.ok) throw new Error('Failed to get recall analytics');
+    return res.json();
+  },
 };

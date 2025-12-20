@@ -34,6 +34,8 @@ export interface Conversation {
   messages: ConversationMessage[];
   outcome?: string;
   turn_errors: Record<number, TurnError[]>; // turn_index -> errors
+  manual_labels?: Record<number, string[]>; // turn_index -> manual labels
+  manually_labelled?: boolean; // flag to indicate if conversation has been manually labelled
 }
 
 export interface Project {
