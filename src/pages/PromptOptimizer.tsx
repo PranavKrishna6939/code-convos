@@ -241,7 +241,7 @@ export default function PromptOptimizer() {
       {/* Header */}
       <div className="border-b border-border px-6 py-4 flex items-center justify-between shrink-0 bg-card">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectId}`)}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/project/${projectId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Project
           </Button>
