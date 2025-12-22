@@ -158,11 +158,11 @@ export const api = {
     return res.json();
   },
 
-  optimizeJudgePrompt: async (judgeId: string, bucket: any, agentPrompt?: string): Promise<{ success: boolean, optimizedPrompt: string }> => {
+  optimizeJudgePrompt: async (judgeId: string, bucket: any, agentPrompt?: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, optimizedPrompt: string }> => {
     const res = await fetch(`${API_BASE}/optimize-judge-prompt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ judgeId, bucket, agentPrompt }),
+      body: JSON.stringify({ judgeId, bucket, agentPrompt, provider, model, temperature }),
     });
     if (!res.ok) throw new Error('Failed to generate optimized prompt');
     return res.json();

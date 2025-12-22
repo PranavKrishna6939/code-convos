@@ -831,7 +831,7 @@ Use the provided tool to submit your analysis.`,
 
 // Optimize Judge Prompt (Meta-Prompting)
 app.post('/api/optimize-judge-prompt', async (req, res) => {
-  const { judgeId, bucket, agentPrompt } = req.body;
+  const { judgeId, bucket, agentPrompt, provider, model, temperature } = req.body;
 
   const judge = db.judges.find(j => j.id === judgeId);
   if (!judge) return res.status(404).json({ error: 'Judge not found' });
@@ -907,17 +907,29 @@ app.post('/api/optimize-judge-prompt', async (req, res) => {
     });
 
     // Prepare input data
-    const provider = judge.provider || 'openai';
+    // Use provided settings or fallback to judge settings (or defaults)
+    const selectedProvider = provider || judge.provider || 'openai';
+    const selectedModel = model || judge.model || 'gpt-4o';
+    const selectedTemperature = temperature !== undefined ? parseFloat(temperature) : 0;
     
-    // Use the provided agentPrompt if available, otherwise fallback to judge.prompt (though user requested agent prompt)
+    // Use the provided agentPrompt if available, otherwise fallback to judge.prompt
     const promptToOptimize = agentPrompt || judge.prompt;
     
+    // Get the correct API key based on the SELECTED provider
+    const apiKeyEnvVar = `${selectedProvider.toUpperCase()}_API_KEY`;
+    const apiKey = process.env[apiKeyEnvVar];
+
+    if (!apiKey) {
+        console.warn(`[Optimize] Warning: No API key found for provider ${selectedProvider} (checked ${apiKeyEnvVar})`);
+    }
+
     const inputData = {
       current_prompt: promptToOptimize,
       examples: bucket.examples,
-      provider: provider,
-      model: judge.model || 'gpt-4o',
-      api_key: process.env[`${provider.toUpperCase()}_API_KEY`]
+      provider: selectedProvider,
+      model: selectedModel,
+      temperature: selectedTemperature,
+      api_key: apiKey
     };
 
     pythonProcess.stdin.write(JSON.stringify(inputData));

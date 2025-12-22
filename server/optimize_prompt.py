@@ -17,6 +17,7 @@ def main():
     examples = input_data.get("examples", [])
     provider = input_data.get("provider", "openai")
     model_name = input_data.get("model", "gpt-4o")
+    temperature = input_data.get("temperature", 0.0)
     
     if not current_prompt:
         print(json.dumps({"error": "Missing current_prompt"}))
@@ -51,11 +52,11 @@ def main():
         if provider == 'openai':
             if not os.environ.get("OPENAI_API_KEY") and input_data.get("api_key"):
                 os.environ["OPENAI_API_KEY"] = input_data.get("api_key")
-            model = ChatOpenAI(model=model_name)
+            model = ChatOpenAI(model=model_name, temperature=temperature)
         elif provider == 'google':
             if not os.environ.get("GOOGLE_API_KEY") and input_data.get("api_key"):
                 os.environ["GOOGLE_API_KEY"] = input_data.get("api_key")
-            model = ChatGoogleGenerativeAI(model=model_name)
+            model = ChatGoogleGenerativeAI(model=model_name, temperature=temperature)
         else:
             # Fallback or error
             print(json.dumps({"error": f"Unsupported provider: {provider}"}))

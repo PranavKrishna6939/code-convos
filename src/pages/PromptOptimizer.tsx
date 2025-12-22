@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye } from 'lucide-react';
+import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye, Settings2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -23,9 +23,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import * as Diff from 'diff';
 import { Textarea } from '@/components/ui/textarea';
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 const DiffViewer = ({ oldText, newText }: { oldText: string, newText: string }) => {
   const diff = Diff.diffLines(oldText, newText);
@@ -61,6 +69,11 @@ export default function PromptOptimizer() {
   const [agentPrompt, setAgentPrompt] = useState('');
   const [activeBucketIndex, setActiveBucketIndex] = useState<number | null>(null);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
+
+  // Optimizer Settings
+  const [optimizerProvider, setOptimizerProvider] = useState<string>('openai');
+  const [optimizerModel, setOptimizerModel] = useState<string>('gpt-4o');
+  const [optimizerTemperature, setOptimizerTemperature] = useState<number>(0);
 
   const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -155,7 +168,14 @@ export default function PromptOptimizer() {
     setOriginalPrompt(agentPrompt);
 
     try {
-      const result = await api.optimizeJudgePrompt(selectedJudgeId, bucket, agentPrompt);
+      const result = await api.optimizeJudgePrompt(
+        selectedJudgeId, 
+        bucket, 
+        agentPrompt,
+        optimizerProvider,
+        optimizerModel,
+        optimizerTemperature
+      );
       setNewPrompt(result.optimizedPrompt);
       setIsDiffOpen(true);
     } catch (error) {
@@ -208,6 +228,63 @@ export default function PromptOptimizer() {
         </div>
         
         <div className="flex items-center gap-4">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" title="Optimizer Settings">
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium leading-none">Optimizer Settings</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Configure the LLM used for optimization.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <Label htmlFor="provider">Provider</Label>
+                    <Select value={optimizerProvider} onValueChange={setOptimizerProvider}>
+                      <SelectTrigger id="provider" className="col-span-2 h-8">
+                        <SelectValue placeholder="Select provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="google">Google</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <Label htmlFor="model">Model</Label>
+                    <Input
+                      id="model"
+                      value={optimizerModel}
+                      onChange={(e) => setOptimizerModel(e.target.value)}
+                      className="col-span-2 h-8"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="temperature">Temperature</Label>
+                      <span className="w-12 rounded-md border border-transparent px-2 py-0.5 text-right text-sm text-muted-foreground hover:border-border">
+                        {optimizerTemperature}
+                      </span>
+                    </div>
+                    <Slider
+                      id="temperature"
+                      max={1}
+                      step={0.1}
+                      value={[optimizerTemperature]}
+                      onValueChange={(value) => setOptimizerTemperature(value[0])}
+                      className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
+                    />
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
             <SelectTrigger className="w-[300px]">
               <SelectValue placeholder="Select a judge to analyze" />
