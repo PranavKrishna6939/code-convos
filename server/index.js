@@ -5,7 +5,6 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 const { spawn } = require('child_process');
 
 const app = express();
