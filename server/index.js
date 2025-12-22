@@ -735,7 +735,7 @@ Output must be valid JSON with the following structure:
     });
 
     console.log('LLM Response status:', response.status);
-    // console.log('LLM Response data:', JSON.stringify(response.data, null, 2));
+    console.log('LLM Response data:', JSON.stringify(response.data, null, 2));
 
     let result = response.data;
     if (typeof result === 'string') {
@@ -775,6 +775,14 @@ Output must be valid JSON with the following structure:
              result = result.message;
         }
     }
+
+    // Fallback: if result is an array, assume it's the buckets
+    if (Array.isArray(result)) {
+        result = { buckets: result };
+    }
+
+    console.log('Parsed result keys:', Object.keys(result));
+    console.log('Parsed buckets:', result.buckets ? result.buckets.length : 'undefined');
 
     console.log('Parsed buckets:', result.buckets ? result.buckets.length : 'undefined');
 
