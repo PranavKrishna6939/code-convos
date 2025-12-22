@@ -147,4 +147,14 @@ export const api = {
     if (!res.ok) throw new Error('Failed to get recall analytics');
     return res.json();
   },
+
+  optimizePrompt: async (projectId: string, judgeId: string): Promise<{ success: boolean, buckets: any[] }> => {
+    const res = await fetch(`${API_BASE}/optimize-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, judgeId }),
+    });
+    if (!res.ok) throw new Error('Failed to optimize prompt');
+    return res.json();
+  },
 };

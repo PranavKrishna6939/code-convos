@@ -41,10 +41,29 @@ export interface Conversation {
   manually_labelled?: boolean; // flag to indicate if conversation has been manually labelled
 }
 
+export interface OptimizationExample {
+  conversationId: string;
+  turnIndex: number;
+  reason: string;
+  suggestion: string;
+}
+
+export interface OptimizationBucket {
+  title: string;
+  description: string;
+  examples: OptimizationExample[];
+}
+
+export interface OptimizationResult {
+  timestamp: number;
+  buckets: OptimizationBucket[];
+}
+
 export interface Project {
   id: string;
   name: string;
   conversations: Conversation[];
   api_key: string;
   conversationCount?: number;
+  optimizations?: Record<string, OptimizationResult>; // judgeId -> result
 }

@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsDialog } from '@/components/AnalyticsDialog';
+import { PromptOptimizerDialog } from '@/components/PromptOptimizerDialog';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
@@ -307,6 +308,7 @@ const ProjectDetail = () => {
                 <BarChart3 className="w-3 h-3 mr-1" />
                 Analytics
               </Button>
+              <PromptOptimizerDialog project={project} judges={judges} />
               <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
                 <SelectTrigger className="w-32 h-8 text-sm">
                   <SelectValue placeholder="Filter Outcome" />

@@ -600,6 +600,166 @@ app.post('/api/projects/:projectId/conversations/:convId/mark-labelled', (req, r
   res.json({ success: true });
 });
 
+// Prompt Optimization
+app.post('/api/optimize-prompt', async (req, res) => {
+  const { projectId, judgeId } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const judge = db.judges.find(j => j.id === judgeId);
+  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+
+  // Collect errors
+  const errorsToAnalyze = [];
+  const MAX_ERRORS = 20; // Limit context size
+
+  for (const conversation of project.conversations) {
+    if (errorsToAnalyze.length >= MAX_ERRORS) break;
+    if (!conversation.turn_errors) continue;
+
+    // Map turn index to message index
+    let assistantTurnCount = 0;
+    const turnIndexToMessageIndex = {};
+    conversation.messages.forEach((msg, idx) => {
+      if (msg.role === 'assistant') {
+        turnIndexToMessageIndex[assistantTurnCount] = idx;
+        assistantTurnCount++;
+      }
+    });
+
+    for (const [turnIdxStr, errors] of Object.entries(conversation.turn_errors)) {
+      const turnIdx = parseInt(turnIdxStr);
+      // Filter errors for this judge
+      // For single label, check label_name. For multi, check if label exists in schema keys
+      const relevantErrors = errors.filter(e => {
+        if (judge.judge_type === 'multi' && judge.labels_schema) {
+          return Object.keys(judge.labels_schema).includes(e.label);
+        }
+        return e.label === judge.label_name;
+      });
+
+      for (const error of relevantErrors) {
+        if (errorsToAnalyze.length >= MAX_ERRORS) break;
+
+        const msgIdx = turnIndexToMessageIndex[turnIdx];
+        if (msgIdx === undefined) continue;
+
+        const userBefore = conversation.messages[msgIdx - 1]?.content || "[No user message before]";
+        const assistantMsg = conversation.messages[msgIdx]?.content || "[No assistant message]";
+        const userAfter = conversation.messages[msgIdx + 1]?.content || "[No user message after]";
+
+        errorsToAnalyze.push({
+          conversationId: conversation.id,
+          turnIndex: turnIdx,
+          context: {
+            user_before: userBefore,
+            assistant: assistantMsg,
+            user_after: userAfter
+          },
+          error_label: error.label,
+          reason: error.edited_reason || error.original_reason
+        });
+      }
+    }
+  }
+
+  if (errorsToAnalyze.length === 0) {
+    return res.json({ success: true, buckets: [] });
+  }
+
+  try {
+    const payload = {
+      config: {
+        provider: judge.provider || "openai",
+        model: judge.model || "gpt-4.1-mini",
+        temperature: 0.4
+      },
+      prompt: `You are an expert prompt engineer and data analyst.
+Your task is to analyze a set of errors detected by an LLM judge and categorize them into 2-3 distinct "buckets" or categories based on the root cause or type of failure.
+
+Judge Information:
+Name: ${judge.label_name}
+Description: ${judge.description}
+Prompt: ${judge.prompt}
+
+I will provide a list of errors. Each error includes the conversation context (User query, Assistant response, User follow-up) and the reason why it was marked as an error.
+
+For each bucket, you must provide:
+1. Title: A short, descriptive title for the category.
+2. Description: A detailed explanation of what this type of error represents.
+3. Examples: Select 1-2 representative examples from the provided list. For each example, provide:
+    - The original error reason.
+    - A "Corrected Response": Rewrite the assistant's response to fix the error and satisfy the user's intent better.
+
+Output must be valid JSON with the following structure:
+{
+  "buckets": [
+    {
+      "title": "string",
+      "description": "string",
+      "examples": [
+        {
+          "conversationId": "string (from input)",
+          "turnIndex": number (from input),
+          "reason": "string",
+          "suggestion": "string (the corrected response)"
+        }
+      ]
+    }
+  ]
+}`,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify(errorsToAnalyze, null, 2)
+        }
+      ]
+    };
+
+    const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    let result = response.data;
+    if (typeof result === 'string') {
+        try {
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
+        } catch (e) {
+            console.error('Failed to parse Optimization result:', e);
+        }
+    }
+    
+    // Handle nested message property
+    if (result && result.message) {
+        try {
+             const cleanMessage = typeof result.message === 'string' ? result.message.replace(/```json\n?|\n?```/g, '') : result.message;
+             result = typeof cleanMessage === 'string' ? JSON.parse(cleanMessage) : cleanMessage;
+        } catch (e) {
+             // if message is an object, use it
+             result = result.message;
+        }
+    }
+
+    // Save to project
+    if (!project.optimizations) {
+      project.optimizations = {};
+    }
+    project.optimizations[judgeId] = {
+      timestamp: Date.now(),
+      buckets: result.buckets || []
+    };
+    saveDb();
+
+    res.json({ success: true, buckets: result.buckets });
+
+  } catch (error) {
+    console.error('Optimization error:', error);
+    res.status(500).json({ error: 'Optimization failed', details: error.message });
+  }
+});
+
 // Recall Analytics
 app.get('/api/projects/:projectId/analytics/recall', (req, res) => {
   const { projectId } = req.params;
