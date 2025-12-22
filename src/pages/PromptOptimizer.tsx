@@ -144,7 +144,7 @@ export default function PromptOptimizer() {
     if (!agentPrompt.trim()) {
       toast({
         title: "Agent Prompt Required",
-        description: "Please enter the Voice AI Agent's system prompt in the text area above before generating a fix.",
+        description: "Please click 'Agent Master Prompt' and paste the Voice AI Agent's system prompt before generating a fix.",
         variant: "destructive"
       });
       return;
@@ -224,24 +224,28 @@ export default function PromptOptimizer() {
           <Dialog open={isMasterPromptOpen} onOpenChange={setIsMasterPromptOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" disabled={!selectedJudge}>
-                <Eye className="mr-2 h-4 w-4" />
-                View Master Prompt
+                <Wand2 className="mr-2 h-4 w-4" />
+                Agent Master Prompt
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
               <DialogHeader>
-                <DialogTitle>Master Prompt: {selectedJudge?.label_name}</DialogTitle>
-                <DialogDescription>Current system prompt for this judge.</DialogDescription>
+                <DialogTitle>Voice AI Agent Master Prompt</DialogTitle>
+                <DialogDescription>
+                  Paste the system prompt of the <strong>Voice AI Agent</strong> you want to optimize. 
+                  This is <strong>NOT</strong> the Judge's prompt.
+                </DialogDescription>
               </DialogHeader>
               <div className="flex-1 overflow-hidden py-4">
                 <Textarea 
                   className="h-full font-mono text-sm" 
-                  value={selectedJudge?.prompt || ''} 
-                  readOnly 
+                  placeholder="Paste your Voice AI Agent's system prompt here..."
+                  value={agentPrompt}
+                  onChange={(e) => setAgentPrompt(e.target.value)}
                 />
               </div>
               <DialogFooter>
-                <Button onClick={() => setIsMasterPromptOpen(false)}>Close</Button>
+                <Button onClick={() => setIsMasterPromptOpen(false)}>Save & Close</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -269,28 +273,6 @@ export default function PromptOptimizer() {
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto space-y-8">
-          {/* Agent Prompt Input Section */}
-          <Card className="border-dashed border-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-medium flex items-center gap-2">
-                <Wand2 className="w-5 h-5 text-primary" />
-                Target Agent Prompt
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Paste the system prompt of the <strong>Voice AI Agent</strong> you want to optimize. 
-                The optimizer will suggest changes to <em>this</em> prompt based on the Judge's feedback.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <Textarea 
-                placeholder="Paste your Voice AI Agent's system prompt here..." 
-                className="font-mono text-sm min-h-[150px]"
-                value={agentPrompt}
-                onChange={(e) => setAgentPrompt(e.target.value)}
-              />
-            </CardContent>
-          </Card>
-
         {optimizationResult ? (
           <div className="space-y-8">
             <div className="flex items-center justify-between">
@@ -407,8 +389,8 @@ export default function PromptOptimizer() {
               <X className="w-4 h-4 mr-2" />
               Reject
             </Button>
-            <Button onClick={handleAcceptChanges} disabled={updateJudgeMutation.isPending}>
-              {updateJudgeMutation.isPending ? (
+            <Button onClick={handleAcceptChanges} disabled={markFixedMutation.isPending}>
+              {markFixedMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               ) : (
                 <Check className="w-4 h-4 mr-2" />
