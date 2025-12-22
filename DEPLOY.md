@@ -19,9 +19,15 @@ sudo apt install -y nodejs
 ```
 
 ### Python (3.10+) & venv
-Required for the Prompt Optimizer feature.
+Required for the Prompt Optimizer feature. **Note: Python 3.10 or higher is required.**
 ```bash
-sudo apt install -y python3 python3-pip python3-venv
+# For Ubuntu
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3.11-dev
+
+# For Amazon Linux 2023
+sudo yum install -y python3.11 python3.11-pip python3.11-devel
 ```
 
 ### Git
