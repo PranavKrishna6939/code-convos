@@ -24,6 +24,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Loader2, Sparkles, Lightbulb } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
+import { useToast } from "@/components/ui/use-toast";
+
 interface PromptOptimizerDialogProps {
   project: Project;
   judges: JudgeAgent[];
@@ -33,14 +35,36 @@ export function PromptOptimizerDialog({ project, judges }: PromptOptimizerDialog
   const [selectedJudgeId, setSelectedJudgeId] = useState<string>('');
   const [isOpen, setIsOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const optimizeMutation = useMutation({
     mutationFn: async () => {
       if (!selectedJudgeId) return;
       return api.optimizePrompt(project.id, selectedJudgeId);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project', project.id] });
+      if (data?.buckets?.length === 0) {
+        toast({
+          title: "Analysis Complete",
+          description: "No errors found to analyze for this judge.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Analysis Complete",
+          description: "Prompt optimization suggestions generated.",
+          variant: "default",
+        });
+      }
+    },
+    onError: (error) => {
+      console.error("Optimization failed:", error);
+      toast({
+        title: "Optimization Failed",
+        description: "Failed to generate prompt suggestions. Check console for details.",
+        variant: "destructive",
+      });
     }
   });
 

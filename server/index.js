@@ -602,13 +602,20 @@ app.post('/api/projects/:projectId/conversations/:convId/mark-labelled', (req, r
 
 // Prompt Optimization
 app.post('/api/optimize-prompt', async (req, res) => {
+  console.log('Received optimize-prompt request:', req.body);
   const { projectId, judgeId } = req.body;
 
   const project = db.projects.find(p => p.id === projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project) {
+    console.log('Project not found:', projectId);
+    return res.status(404).json({ error: 'Project not found' });
+  }
 
   const judge = db.judges.find(j => j.id === judgeId);
-  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+  if (!judge) {
+    console.log('Judge not found:', judgeId);
+    return res.status(404).json({ error: 'Judge not found' });
+  }
 
   // Collect errors
   const errorsToAnalyze = [];
@@ -639,6 +646,10 @@ app.post('/api/optimize-prompt', async (req, res) => {
         return e.label === judge.label_name;
       });
 
+      if (relevantErrors.length === 0 && errors.length > 0) {
+         // console.log(`Skipping errors for turn ${turnIdx} - Label mismatch. Found: ${errors.map(e => e.label).join(', ')}, Expected: ${judge.label_name}`);
+      }
+
       for (const error of relevantErrors) {
         if (errorsToAnalyze.length >= MAX_ERRORS) break;
 
@@ -663,6 +674,8 @@ app.post('/api/optimize-prompt', async (req, res) => {
       }
     }
   }
+
+  console.log(`Found ${errorsToAnalyze.length} errors to analyze for judge ${judge.label_name}`);
 
   if (errorsToAnalyze.length === 0) {
     return res.json({ success: true, buckets: [] });
@@ -721,26 +734,49 @@ Output must be valid JSON with the following structure:
       headers: { 'Content-Type': 'application/json' }
     });
 
+    console.log('LLM Response status:', response.status);
+    // console.log('LLM Response data:', JSON.stringify(response.data, null, 2));
+
     let result = response.data;
     if (typeof result === 'string') {
         try {
-            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
-            result = JSON.parse(cleanResult);
+            // Try to find JSON object in the string
+            const jsonMatch = result.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                result = JSON.parse(jsonMatch[0]);
+            } else {
+                // Fallback to simple cleanup
+                const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+                result = JSON.parse(cleanResult);
+            }
         } catch (e) {
             console.error('Failed to parse Optimization result:', e);
+            console.log('Raw result was:', result);
         }
     }
     
     // Handle nested message property
     if (result && result.message) {
         try {
-             const cleanMessage = typeof result.message === 'string' ? result.message.replace(/```json\n?|\n?```/g, '') : result.message;
-             result = typeof cleanMessage === 'string' ? JSON.parse(cleanMessage) : cleanMessage;
+             let cleanMessage = result.message;
+             if (typeof cleanMessage === 'string') {
+                const jsonMatch = cleanMessage.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    cleanMessage = jsonMatch[0];
+                } else {
+                    cleanMessage = cleanMessage.replace(/```json\n?|\n?```/g, '');
+                }
+                result = JSON.parse(cleanMessage);
+             } else {
+                result = cleanMessage;
+             }
         } catch (e) {
              // if message is an object, use it
              result = result.message;
         }
     }
+
+    console.log('Parsed buckets:', result.buckets ? result.buckets.length : 'undefined');
 
     // Save to project
     if (!project.optimizations) {
@@ -755,7 +791,10 @@ Output must be valid JSON with the following structure:
     res.json({ success: true, buckets: result.buckets });
 
   } catch (error) {
-    console.error('Optimization error:', error);
+    console.error('Optimization error:', error.message);
+    if (error.response) {
+        console.error('LLM response data:', error.response.data);
+    }
     res.status(500).json({ error: 'Optimization failed', details: error.message });
   }
 });
