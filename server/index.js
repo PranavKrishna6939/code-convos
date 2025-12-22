@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -841,9 +842,17 @@ app.post('/api/optimize-judge-prompt', async (req, res) => {
     
     // Robust Python detection for Windows/Linux and different venv locations
     const possiblePaths = [
-      path.join(__dirname, '../.venv/bin/python'),       // Linux/Mac Root
+      path.join(__dirname, '../.venv/bin/python3.11'), // Linux/Mac Root (Specific)
+      path.join(__dirname, '../.venv/bin/python3.10'), // Linux/Mac Root (Specific)
+      path.join(__dirname, '../.venv/bin/python3'),    // Linux/Mac Root (Generic)
+      path.join(__dirname, '../.venv/bin/python'),     // Linux/Mac Root (Fallback)
+      
+      path.join(__dirname, '.venv/bin/python3.11'),    // Linux/Mac Server dir (Specific)
+      path.join(__dirname, '.venv/bin/python3.10'),    // Linux/Mac Server dir (Specific)
+      path.join(__dirname, '.venv/bin/python3'),       // Linux/Mac Server dir (Generic)
+      path.join(__dirname, '.venv/bin/python'),        // Linux/Mac Server dir (Fallback)
+
       path.join(__dirname, '../.venv/Scripts/python.exe'), // Windows Root
-      path.join(__dirname, '.venv/bin/python'),          // Linux/Mac Server dir
       path.join(__dirname, '.venv/Scripts/python.exe'),  // Windows Server dir
     ];
     
