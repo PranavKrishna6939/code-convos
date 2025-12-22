@@ -682,6 +682,40 @@ app.post('/api/optimize-prompt', async (req, res) => {
   }
 
   try {
+
+
+    const tool = {
+      name: "prompt_optimization_result",
+      description: "Submit the categorized error buckets and suggestions.",
+      properties: {
+        buckets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              description: { type: "string" },
+              examples: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    conversationId: { type: "string" },
+                    turnIndex: { type: "number" },
+                    reason: { type: "string" },
+                    suggestion: { type: "string" }
+                  },
+                  required: ["conversationId", "turnIndex", "reason", "suggestion"]
+                }
+              }
+            },
+            required: ["title", "description", "examples"]
+          }
+        }
+      },
+      required: ["buckets"]
+    };
+
     const payload = {
       config: {
         provider: judge.provider || "openai",
@@ -705,29 +739,14 @@ For each bucket, you must provide:
     - The original error reason.
     - A "Corrected Response": Rewrite the assistant's response to fix the error and satisfy the user's intent better.
 
-Output must be valid JSON with the following structure:
-{
-  "buckets": [
-    {
-      "title": "string",
-      "description": "string",
-      "examples": [
-        {
-          "conversationId": "string (from input)",
-          "turnIndex": number (from input),
-          "reason": "string",
-          "suggestion": "string (the corrected response)"
-        }
-      ]
-    }
-  ]
-}`,
+Use the provided tool to submit your analysis.`,
       messages: [
         {
           role: "user",
           content: JSON.stringify(errorsToAnalyze, null, 2)
         }
-      ]
+      ],
+      tool: tool
     };
 
     const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
@@ -738,53 +757,34 @@ Output must be valid JSON with the following structure:
     console.log('LLM Response data:', JSON.stringify(response.data, null, 2));
 
     let result = response.data;
+    
+    // If result is string, try to parse it (sometimes API returns stringified JSON)
     if (typeof result === 'string') {
         try {
-            // Try to find JSON object in the string
-            const jsonMatch = result.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                result = JSON.parse(jsonMatch[0]);
-            } else {
-                // Fallback to simple cleanup
-                const cleanResult = result.replace(/```json\n?|\n?```/g, '');
-                result = JSON.parse(cleanResult);
-            }
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
         } catch (e) {
             console.error('Failed to parse Optimization result:', e);
-            console.log('Raw result was:', result);
         }
     }
-    
-    // Handle nested message property
+
+    // Handle nested message property if present
     if (result && result.message) {
+        result = result.message;
+    }
+
+    // If result is still a string after extracting message, parse it again
+    if (typeof result === 'string') {
         try {
-             let cleanMessage = result.message;
-             if (typeof cleanMessage === 'string') {
-                const jsonMatch = cleanMessage.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    cleanMessage = jsonMatch[0];
-                } else {
-                    cleanMessage = cleanMessage.replace(/```json\n?|\n?```/g, '');
-                }
-                result = JSON.parse(cleanMessage);
-             } else {
-                result = cleanMessage;
-             }
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
         } catch (e) {
-             // if message is an object, use it
-             result = result.message;
+            console.error('Failed to parse inner result:', e);
         }
     }
 
-    // Fallback: if result is an array, assume it's the buckets
-    if (Array.isArray(result)) {
-        result = { buckets: result };
-    }
-
-    console.log('Parsed result keys:', Object.keys(result));
-    console.log('Parsed buckets:', result.buckets ? result.buckets.length : 'undefined');
-
-    console.log('Parsed buckets:', result.buckets ? result.buckets.length : 'undefined');
+    console.log('Parsed result keys:', result ? Object.keys(result) : 'null');
+    console.log('Parsed buckets:', result && result.buckets ? result.buckets.length : 'undefined');
 
     // Save to project
     if (!project.optimizations) {
