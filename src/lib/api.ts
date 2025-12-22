@@ -34,6 +34,16 @@ export const api = {
     return res.json();
   },
 
+  updateProject: async (id: string, data: Partial<Project>): Promise<Project> => {
+    const res = await fetch(`${API_BASE}/projects/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update project');
+    return res.json();
+  },
+
   duplicateProject: async (id: string): Promise<Project> => {
     const res = await fetch(`${API_BASE}/projects/${id}/duplicate`, {
       method: 'POST',

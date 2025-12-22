@@ -72,4 +72,5 @@ export interface Project {
   api_key: string;
   conversationCount?: number;
   optimizations?: Record<string, OptimizationResult>; // judgeId -> result
+  agentPrompt?: string;
 }

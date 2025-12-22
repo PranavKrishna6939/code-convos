@@ -210,6 +210,21 @@ app.delete('/api/projects/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// Update Project (e.g. for agentPrompt)
+app.put('/api/projects/:id', (req, res) => {
+  const project = db.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { agentPrompt } = req.body;
+  
+  if (agentPrompt !== undefined) {
+    project.agentPrompt = agentPrompt;
+  }
+
+  saveDb();
+  res.json(project);
+});
+
 // Duplicate Project
 app.post('/api/projects/:id/duplicate', (req, res) => {
   const project = db.projects.find(p => p.id === req.params.id);

@@ -71,14 +71,35 @@ export default function PromptOptimizer() {
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
 
   // Optimizer Settings
-  const [optimizerProvider, setOptimizerProvider] = useState<string>('google');
-  const [optimizerModel, setOptimizerModel] = useState<string>('gemini-3-flash-preview');
-  const [optimizerTemperature, setOptimizerTemperature] = useState<number>(0);
+  const [optimizerProvider, setOptimizerProvider] = useState<string>('openai');
+  const [optimizerModel, setOptimizerModel] = useState<string>('gpt-4.1');
+  const [optimizerTemperature, setOptimizerTemperature] = useState<number>(0.2);
 
   const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.getProject(projectId!),
     enabled: !!projectId
+  });
+
+  // Load agent prompt from project
+  useEffect(() => {
+    if (project?.agentPrompt) {
+      setAgentPrompt(project.agentPrompt);
+    }
+  }, [project]);
+
+  const updateProjectMutation = useMutation({
+    mutationFn: async (data: any) => {
+      if (!projectId) return;
+      return api.updateProject(projectId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast({ title: "Saved", description: "Agent Master Prompt saved to project." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save Agent Master Prompt.", variant: "destructive" });
+    }
   });
 
   const { data: judges = [] } = useQuery({
@@ -191,12 +212,15 @@ export default function PromptOptimizer() {
     // Update the local agent prompt state with the new version
     setAgentPrompt(newPrompt);
     
+    // Save to project
+    updateProjectMutation.mutate({ agentPrompt: newPrompt });
+
     // Mark bucket as fixed
     markFixedMutation.mutate(activeBucketIndex);
     
     toast({ 
       title: "Prompt Updated", 
-      description: "The Agent Prompt has been updated in the editor. You can now copy it to your agent configuration." 
+      description: "The Agent Prompt has been updated and saved to the project." 
     });
     
     setIsDiffOpen(false);
@@ -322,7 +346,10 @@ export default function PromptOptimizer() {
                 />
               </div>
               <DialogFooter>
-                <Button onClick={() => setIsMasterPromptOpen(false)}>Save & Close</Button>
+                <Button onClick={() => {
+                  updateProjectMutation.mutate({ agentPrompt });
+                  setIsMasterPromptOpen(false);
+                }}>Save & Close</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
