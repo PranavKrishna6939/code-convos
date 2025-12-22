@@ -737,7 +737,8 @@ For each bucket, you must provide:
 2. Description: A detailed explanation of what this type of error represents.
 3. Examples: Select 1-2 representative examples from the provided list. For each example, provide:
     - The original error reason.
-    - A "Corrected Response": Rewrite the assistant's response to fix the error and satisfy the user's intent better.
+    - A "Corrected Response": Rewrite the assistant's response to fix the error.
+      CRITICAL: The corrected response MUST strictly adhere to ALL rules and guidelines defined in the "Judge Information" prompt provided above. It must fix the specific error while remaining compliant with all other constraints (e.g., language, tone, length, formatting).
 
 Use the provided tool to submit your analysis.`,
       messages: [
