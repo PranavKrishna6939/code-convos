@@ -57,6 +57,7 @@ export interface OptimizationBucket {
   title: string;
   description: string;
   examples: OptimizationExample[];
+  fixed?: boolean;
 }
 
 export interface OptimizationResult {

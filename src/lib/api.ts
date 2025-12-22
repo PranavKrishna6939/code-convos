@@ -157,4 +157,22 @@ export const api = {
     if (!res.ok) throw new Error('Failed to optimize prompt');
     return res.json();
   },
+
+  optimizeJudgePrompt: async (judgeId: string, bucket: any): Promise<{ success: boolean, optimizedPrompt: string }> => {
+    const res = await fetch(`${API_BASE}/optimize-judge-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ judgeId, bucket }),
+    });
+    if (!res.ok) throw new Error('Failed to generate optimized prompt');
+    return res.json();
+  },
+
+  markBucketFixed: async (projectId: string, judgeId: string, bucketIndex: number): Promise<void> => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/optimizations/${judgeId}/buckets/${bucketIndex}/fix`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to mark bucket as fixed');
+    return res.json();
+  },
 };

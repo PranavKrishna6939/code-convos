@@ -1,9 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = 4001;
@@ -825,6 +827,91 @@ Use the provided tool to submit your analysis.`,
     }
     res.status(500).json({ error: 'Optimization failed', details: error.message });
   }
+});
+
+// Optimize Judge Prompt (Meta-Prompting)
+app.post('/api/optimize-judge-prompt', async (req, res) => {
+  const { judgeId, bucket } = req.body;
+
+  const judge = db.judges.find(j => j.id === judgeId);
+  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+
+  try {
+    const pythonScript = path.join(__dirname, 'optimize_prompt.py');
+    // Try to find venv python, fallback to system python
+    const venvPython = path.join(__dirname, '../.venv/Scripts/python.exe');
+    const pythonExecutable = fs.existsSync(venvPython) ? venvPython : 'python';
+
+    const pythonProcess = spawn(pythonExecutable, [pythonScript]);
+
+    let outputData = '';
+    let errorData = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      outputData += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorData += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error('Python script error:', errorData);
+        // Only send response if not already sent (though close should happen once)
+        if (!res.headersSent) {
+            return res.status(500).json({ error: 'Prompt optimization failed', details: errorData });
+        }
+      }
+
+      try {
+        const result = JSON.parse(outputData);
+        if (result.error) {
+             if (!res.headersSent) return res.status(500).json({ error: result.error });
+        }
+        if (!res.headersSent) res.json({ success: true, optimizedPrompt: result.optimizedPrompt });
+      } catch (e) {
+        console.error('Failed to parse python output:', outputData);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to parse optimization result' });
+      }
+    });
+
+    // Prepare input data
+    const provider = judge.provider || 'openai';
+    const inputData = {
+      current_prompt: judge.prompt,
+      examples: bucket.examples,
+      provider: provider,
+      model: judge.model || 'gpt-4o',
+      api_key: process.env[`${provider.toUpperCase()}_API_KEY`]
+    };
+
+    pythonProcess.stdin.write(JSON.stringify(inputData));
+    pythonProcess.stdin.end();
+
+  } catch (error) {
+    console.error('Prompt optimization error:', error.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Prompt optimization failed', details: error.message });
+  }
+});
+
+// Mark Bucket as Fixed
+app.post('/api/projects/:projectId/optimizations/:judgeId/buckets/:bucketIndex/fix', (req, res) => {
+  const { projectId, judgeId, bucketIndex } = req.params;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  if (!project.optimizations || !project.optimizations[judgeId]) {
+    return res.status(404).json({ error: 'Optimization not found' });
+  }
+
+  const bucket = project.optimizations[judgeId].buckets[bucketIndex];
+  if (!bucket) return res.status(404).json({ error: 'Bucket not found' });
+
+  bucket.fixed = true;
+  saveDb();
+  res.json({ success: true });
 });
 
 // Recall Analytics

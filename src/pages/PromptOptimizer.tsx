@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Lightbulb, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -14,6 +14,37 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import * as Diff from 'diff';
+import { Textarea } from '@/components/ui/textarea';
+
+const DiffViewer = ({ oldText, newText }: { oldText: string, newText: string }) => {
+  const diff = Diff.diffLines(oldText, newText);
+
+  return (
+    <div className="font-mono text-sm whitespace-pre-wrap bg-muted/30 p-4 rounded-md border">
+      {diff.map((part, index) => {
+        const color = part.added ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-100' :
+                      part.removed ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-100' : 
+                      'text-foreground';
+        return (
+          <span key={index} className={color}>
+            {part.value}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
 
 export default function PromptOptimizer() {
   const { projectId } = useParams();
@@ -21,6 +52,14 @@ export default function PromptOptimizer() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedJudgeId, setSelectedJudgeId] = useState<string>('');
+  
+  // Diff / Fix State
+  const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [isMasterPromptOpen, setIsMasterPromptOpen] = useState(false);
+  const [originalPrompt, setOriginalPrompt] = useState('');
+  const [newPrompt, setNewPrompt] = useState('');
+  const [activeBucketIndex, setActiveBucketIndex] = useState<number | null>(null);
+  const [isGeneratingFix, setIsGeneratingFix] = useState(false);
 
   const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -32,6 +71,8 @@ export default function PromptOptimizer() {
     queryKey: ['judges'],
     queryFn: api.getJudges
   });
+
+  const selectedJudge = judges.find(j => j.id === selectedJudgeId);
 
   // Set initial selected judge if available
   useEffect(() => {
@@ -70,6 +111,61 @@ export default function PromptOptimizer() {
       });
     }
   });
+
+  const updateJudgeMutation = useMutation({
+    mutationFn: async (updatedJudge: any) => {
+      return api.updateJudge(selectedJudgeId, updatedJudge);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['judges'] });
+      toast({ title: "Success", description: "Master prompt updated successfully." });
+      setIsDiffOpen(false);
+      setIsMasterPromptOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update prompt.", variant: "destructive" });
+    }
+  });
+
+  const markFixedMutation = useMutation({
+    mutationFn: async (bucketIndex: number) => {
+      if (!projectId || !selectedJudgeId) return;
+      return api.markBucketFixed(projectId, selectedJudgeId, bucketIndex);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    }
+  });
+
+  const handleFixPrompt = async (bucket: any, index: number) => {
+    if (!selectedJudge) return;
+    setIsGeneratingFix(true);
+    setActiveBucketIndex(index);
+    setOriginalPrompt(selectedJudge.prompt);
+
+    try {
+      const result = await api.optimizeJudgePrompt(selectedJudgeId, bucket);
+      setNewPrompt(result.optimizedPrompt);
+      setIsDiffOpen(true);
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to generate fix.", variant: "destructive" });
+    } finally {
+      setIsGeneratingFix(false);
+    }
+  };
+
+  const handleAcceptChanges = async () => {
+    if (!selectedJudge || activeBucketIndex === null) return;
+    
+    // 1. Update Judge Prompt
+    await updateJudgeMutation.mutateAsync({
+      ...selectedJudge,
+      prompt: newPrompt
+    });
+
+    // 2. Mark bucket as fixed
+    markFixedMutation.mutate(activeBucketIndex);
+  };
 
   const optimizationResult = project?.optimizations?.[selectedJudgeId];
 
@@ -110,6 +206,31 @@ export default function PromptOptimizer() {
             </SelectContent>
           </Select>
 
+          <Dialog open={isMasterPromptOpen} onOpenChange={setIsMasterPromptOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" disabled={!selectedJudge}>
+                <Eye className="mr-2 h-4 w-4" />
+                View Master Prompt
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Master Prompt: {selectedJudge?.label_name}</DialogTitle>
+                <DialogDescription>Current system prompt for this judge.</DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 overflow-hidden py-4">
+                <Textarea 
+                  className="h-full font-mono text-sm" 
+                  value={selectedJudge?.prompt || ''} 
+                  readOnly 
+                />
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setIsMasterPromptOpen(false)}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button 
             onClick={() => optimizeMutation.mutate()} 
             disabled={!selectedJudgeId || optimizeMutation.isPending}
@@ -143,14 +264,31 @@ export default function PromptOptimizer() {
 
             <div className="grid gap-8">
               {optimizationResult.buckets.map((bucket, idx) => (
-                <Card key={idx} className="border-l-4 border-l-primary">
-                  <CardHeader>
+                <Card key={idx} className={`border-l-4 ${bucket.fixed ? 'border-l-green-500 opacity-70' : 'border-l-primary'}`}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xl font-bold flex items-center gap-3">
-                      <Badge variant="secondary" className="text-base px-3 py-1">Category {idx + 1}</Badge>
+                      <Badge variant={bucket.fixed ? "outline" : "secondary"} className="text-base px-3 py-1">
+                        {bucket.fixed ? <Check className="w-3 h-3 mr-1" /> : null}
+                        Category {idx + 1}
+                      </Badge>
                       {bucket.title}
                     </CardTitle>
+                    {!bucket.fixed && (
+                      <Button 
+                        size="sm" 
+                        onClick={() => handleFixPrompt(bucket, idx)}
+                        disabled={isGeneratingFix && activeBucketIndex === idx}
+                      >
+                        {isGeneratingFix && activeBucketIndex === idx ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        ) : (
+                          <Wand2 className="w-4 h-4 mr-2" />
+                        )}
+                        Fix in Master Prompt
+                      </Button>
+                    )}
                   </CardHeader>
-                  <CardContent className="space-y-6">
+                  <CardContent className="space-y-6 pt-4">
                     <p className="text-base text-muted-foreground leading-relaxed border-b pb-4">
                       {bucket.description}
                     </p>
@@ -210,6 +348,37 @@ export default function PromptOptimizer() {
           </div>
         )}
       </div>
+
+      {/* Diff Dialog */}
+      <Dialog open={isDiffOpen} onOpenChange={setIsDiffOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Review Prompt Changes</DialogTitle>
+            <DialogDescription>
+              Review the proposed changes to the master prompt. Green indicates additions, red indicates removals.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 border rounded-md mt-4">
+            <DiffViewer oldText={originalPrompt} newText={newPrompt} />
+          </ScrollArea>
+
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setIsDiffOpen(false)}>
+              <X className="w-4 h-4 mr-2" />
+              Reject
+            </Button>
+            <Button onClick={handleAcceptChanges} disabled={updateJudgeMutation.isPending}>
+              {updateJudgeMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Accept & Update Master Prompt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
