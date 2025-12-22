@@ -4,13 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3, Sparkles } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsDialog } from '@/components/AnalyticsDialog';
-import { PromptOptimizerDialog } from '@/components/PromptOptimizerDialog';
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
@@ -308,7 +307,14 @@ const ProjectDetail = () => {
                 <BarChart3 className="w-3 h-3 mr-1" />
                 Analytics
               </Button>
-              <PromptOptimizerDialog project={project} judges={judges} />
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => navigate(`/project/${projectId}/optimizer`)}
+              >
+                <Sparkles className="w-3 h-3 mr-1" />
+                Prompt Optimizer
+              </Button>
               <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
                 <SelectTrigger className="w-32 h-8 text-sm">
                   <SelectValue placeholder="Filter Outcome" />

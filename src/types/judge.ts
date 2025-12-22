@@ -46,6 +46,11 @@ export interface OptimizationExample {
   turnIndex: number;
   reason: string;
   suggestion: string;
+  context?: {
+    user_before: string;
+    assistant: string;
+    user_after: string;
+  };
 }
 
 export interface OptimizationBucket {

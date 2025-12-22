@@ -786,6 +786,25 @@ Use the provided tool to submit your analysis.`,
     console.log('Parsed result keys:', result ? Object.keys(result) : 'null');
     console.log('Parsed buckets:', result && result.buckets ? result.buckets.length : 'undefined');
 
+    // Enrich buckets with full context
+    if (result && result.buckets) {
+      result.buckets.forEach(bucket => {
+        if (bucket.examples) {
+          bucket.examples.forEach(example => {
+            // Find the original error context
+            const originalError = errorsToAnalyze.find(e => 
+              e.conversationId === example.conversationId && 
+              e.turnIndex === example.turnIndex
+            );
+            
+            if (originalError) {
+              example.context = originalError.context;
+            }
+          });
+        }
+      });
+    }
+
     // Save to project
     if (!project.optimizations) {
       project.optimizations = {};
