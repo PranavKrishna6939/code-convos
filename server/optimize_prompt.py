@@ -23,6 +23,11 @@ def main():
         print(json.dumps({"error": "Missing current_prompt"}))
         sys.exit(1)
 
+    # Check for variable syntax in current prompt
+    preserve_syntax_instruction = ""
+    if "${" in current_prompt:
+        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${variable} syntax for all variables. Do NOT change them to {variable}."
+
     # Construct trajectories
     trajectories = []
     for ex in examples:
@@ -38,7 +43,7 @@ def main():
         if context.get("user_after"):
             messages.append({"role": "user", "content": context["user_after"]})
             
-        feedback = f"Error: {ex.get('reason', 'Unknown error')}. Suggestion: {ex.get('suggestion', 'No suggestion')}"
+        feedback = f"Error: {ex.get('reason', 'Unknown error')}. Suggestion: {ex.get('suggestion', 'No suggestion')}{preserve_syntax_instruction}"
         
         if messages:
             trajectories.append((messages, feedback))
