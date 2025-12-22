@@ -58,6 +58,7 @@ export default function PromptOptimizer() {
   const [isMasterPromptOpen, setIsMasterPromptOpen] = useState(false);
   const [originalPrompt, setOriginalPrompt] = useState('');
   const [newPrompt, setNewPrompt] = useState('');
+  const [agentPrompt, setAgentPrompt] = useState('');
   const [activeBucketIndex, setActiveBucketIndex] = useState<number | null>(null);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
 
@@ -139,12 +140,22 @@ export default function PromptOptimizer() {
 
   const handleFixPrompt = async (bucket: any, index: number) => {
     if (!selectedJudge) return;
+    
+    if (!agentPrompt.trim()) {
+      toast({
+        title: "Agent Prompt Required",
+        description: "Please enter the Voice AI Agent's system prompt in the text area above before generating a fix.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsGeneratingFix(true);
     setActiveBucketIndex(index);
-    setOriginalPrompt(selectedJudge.prompt);
+    setOriginalPrompt(agentPrompt);
 
     try {
-      const result = await api.optimizeJudgePrompt(selectedJudgeId, bucket);
+      const result = await api.optimizeJudgePrompt(selectedJudgeId, bucket, agentPrompt);
       setNewPrompt(result.optimizedPrompt);
       setIsDiffOpen(true);
     } catch (error) {
@@ -157,14 +168,18 @@ export default function PromptOptimizer() {
   const handleAcceptChanges = async () => {
     if (!selectedJudge || activeBucketIndex === null) return;
     
-    // 1. Update Judge Prompt
-    await updateJudgeMutation.mutateAsync({
-      ...selectedJudge,
-      prompt: newPrompt
-    });
-
-    // 2. Mark bucket as fixed
+    // Update the local agent prompt state with the new version
+    setAgentPrompt(newPrompt);
+    
+    // Mark bucket as fixed
     markFixedMutation.mutate(activeBucketIndex);
+    
+    toast({ 
+      title: "Prompt Updated", 
+      description: "The Agent Prompt has been updated in the editor. You can now copy it to your agent configuration." 
+    });
+    
+    setIsDiffOpen(false);
   };
 
   const optimizationResult = project?.optimizations?.[selectedJudgeId];
@@ -253,8 +268,31 @@ export default function PromptOptimizer() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-5xl mx-auto space-y-8">
+          {/* Agent Prompt Input Section */}
+          <Card className="border-dashed border-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-medium flex items-center gap-2">
+                <Wand2 className="w-5 h-5 text-primary" />
+                Target Agent Prompt
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Paste the system prompt of the <strong>Voice AI Agent</strong> you want to optimize. 
+                The optimizer will suggest changes to <em>this</em> prompt based on the Judge's feedback.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Textarea 
+                placeholder="Paste your Voice AI Agent's system prompt here..." 
+                className="font-mono text-sm min-h-[150px]"
+                value={agentPrompt}
+                onChange={(e) => setAgentPrompt(e.target.value)}
+              />
+            </CardContent>
+          </Card>
+
         {optimizationResult ? (
-          <div className="max-w-5xl mx-auto space-y-8">
+          <div className="space-y-8">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Analysis Results</h2>
               <span className="text-sm text-muted-foreground">
@@ -337,7 +375,7 @@ export default function PromptOptimizer() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground">
+          <div className="flex flex-col items-center justify-center h-[40vh] text-muted-foreground">
             <div className="bg-muted/30 p-8 rounded-full mb-6">
               <Lightbulb className="h-16 w-16 opacity-20" />
             </div>
@@ -347,6 +385,7 @@ export default function PromptOptimizer() {
             </p>
           </div>
         )}
+        </div>
       </div>
 
       {/* Diff Dialog */}

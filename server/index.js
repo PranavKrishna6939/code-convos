@@ -831,16 +831,32 @@ Use the provided tool to submit your analysis.`,
 
 // Optimize Judge Prompt (Meta-Prompting)
 app.post('/api/optimize-judge-prompt', async (req, res) => {
-  const { judgeId, bucket } = req.body;
+  const { judgeId, bucket, agentPrompt } = req.body;
 
   const judge = db.judges.find(j => j.id === judgeId);
   if (!judge) return res.status(404).json({ error: 'Judge not found' });
 
   try {
     const pythonScript = path.join(__dirname, 'optimize_prompt.py');
-    // Try to find venv python, fallback to system python
-    const venvPython = path.join(__dirname, '../.venv/Scripts/python.exe');
-    const pythonExecutable = fs.existsSync(venvPython) ? venvPython : 'python';
+    
+    // Robust Python detection for Windows/Linux and different venv locations
+    const possiblePaths = [
+      path.join(__dirname, '../.venv/bin/python'),       // Linux/Mac Root
+      path.join(__dirname, '../.venv/Scripts/python.exe'), // Windows Root
+      path.join(__dirname, '.venv/bin/python'),          // Linux/Mac Server dir
+      path.join(__dirname, '.venv/Scripts/python.exe'),  // Windows Server dir
+    ];
+    
+    let pythonExecutable = 'python'; // Default fallback
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        pythonExecutable = p;
+        break;
+      }
+    }
+    
+    console.log(`[Optimize] Using Python executable: ${pythonExecutable}`);
+    console.log(`[Optimize] Script path: ${pythonScript}`);
 
     const pythonProcess = spawn(pythonExecutable, [pythonScript]);
 
@@ -857,11 +873,25 @@ app.post('/api/optimize-judge-prompt', async (req, res) => {
 
     pythonProcess.on('close', (code) => {
       if (code !== 0) {
-        console.error('Python script error:', errorData);
-        // Only send response if not already sent (though close should happen once)
-        if (!res.headersSent) {
-            return res.status(500).json({ error: 'Prompt optimization failed', details: errorData });
+        console.error('[Optimize] Python script exited with code:', code);
+        console.error('[Optimize] Stderr:', errorData);
+        console.log('[Optimize] Stdout:', outputData);
+        
+        // Try to parse error from stdout if stderr is empty (since our script prints JSON error to stdout)
+        let errorMsg = errorData;
+        try {
+            if (outputData.trim()) {
+                const result = JSON.parse(outputData);
+                if (result.error) errorMsg = result.error;
+            }
+        } catch (e) {
+            // ignore parse error
         }
+        
+        if (!res.headersSent) {
+            return res.status(500).json({ error: 'Prompt optimization failed', details: errorMsg || 'Unknown error' });
+        }
+        return;
       }
 
       try {
@@ -871,15 +901,19 @@ app.post('/api/optimize-judge-prompt', async (req, res) => {
         }
         if (!res.headersSent) res.json({ success: true, optimizedPrompt: result.optimizedPrompt });
       } catch (e) {
-        console.error('Failed to parse python output:', outputData);
-        if (!res.headersSent) res.status(500).json({ error: 'Failed to parse optimization result' });
+        console.error('[Optimize] Failed to parse python output:', outputData);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to parse optimization result', details: outputData });
       }
     });
 
     // Prepare input data
     const provider = judge.provider || 'openai';
+    
+    // Use the provided agentPrompt if available, otherwise fallback to judge.prompt (though user requested agent prompt)
+    const promptToOptimize = agentPrompt || judge.prompt;
+    
     const inputData = {
-      current_prompt: judge.prompt,
+      current_prompt: promptToOptimize,
       examples: bucket.examples,
       provider: provider,
       model: judge.model || 'gpt-4o',
