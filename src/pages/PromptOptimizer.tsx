@@ -71,8 +71,8 @@ export default function PromptOptimizer() {
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
 
   // Optimizer Settings
-  const [optimizerProvider, setOptimizerProvider] = useState<string>('openai');
-  const [optimizerModel, setOptimizerModel] = useState<string>('gpt-4o');
+  const [optimizerProvider, setOptimizerProvider] = useState<string>('google');
+  const [optimizerModel, setOptimizerModel] = useState<string>('gemini-3-flash-preview');
   const [optimizerTemperature, setOptimizerTemperature] = useState<number>(0);
 
   const { data: project, isLoading: isProjectLoading } = useQuery({
@@ -457,9 +457,9 @@ export default function PromptOptimizer() {
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 border rounded-md mt-4">
+          <div className="flex-1 overflow-y-auto border rounded-md mt-4 min-h-[300px]">
             <DiffViewer oldText={originalPrompt} newText={newPrompt} />
-          </ScrollArea>
+          </div>
 
           <DialogFooter className="mt-4 gap-2">
             <Button variant="outline" onClick={() => setIsDiffOpen(false)}>
