@@ -894,9 +894,14 @@ Prompt: ${j.prompt}
         model: "gpt-4o",
         temperature: 0.4
       },
-      prompt: `You are an expert prompt engineer.
+      prompt: `You are an expert prompt engineer and compliance officer.
 Your task is to generate "Corrected Responses" for a set of error examples.
-CRITICAL: The corrected response must satisfy the rules and guidelines of ALL the following judges simultaneously.
+
+CRITICAL INSTRUCTIONS:
+1. The corrected response must satisfy the rules and guidelines of ALL the following judges simultaneously.
+2. The corrected response must specifically resolve the error described in the "reason" field of the example.
+3. If there is a conflict between judges, prioritize the most restrictive rule, but aim to satisfy both.
+4. The response must be natural and conversational while strictly adhering to the constraints.
 
 Judges Information:
 ${judgesInfo}
@@ -905,9 +910,10 @@ I will provide a list of error buckets with examples. Each example includes the 
 
 For each example in the buckets, provide a "suggestion" (Corrected Response).
 The suggestion must:
-1. Fix the specific error identified in the example.
-2. Strictly adhere to ALL rules from ALL provided judges.
-3. Be a complete, valid response that could replace the original assistant response.
+- Fix the specific error identified in the example.
+- Strictly adhere to ALL rules from ALL provided judges.
+- Be a complete, valid response that could replace the original assistant response.
+- NOT explain the correction, just provide the corrected response text.
 
 Use the provided tool to submit the updated buckets with suggestions.`,
       messages: [

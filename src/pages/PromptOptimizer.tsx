@@ -71,9 +71,9 @@ export default function PromptOptimizer() {
   const [activeBucketIndex, setActiveBucketIndex] = useState<number | null>(null);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
   
-  // Global Fix State
-  const [isGlobalFixOpen, setIsGlobalFixOpen] = useState(false);
-  const [selectedGlobalJudges, setSelectedGlobalJudges] = useState<string[]>([]);
+  // Global Fix State - Removed
+  // const [isGlobalFixOpen, setIsGlobalFixOpen] = useState(false);
+  // const [selectedGlobalJudges, setSelectedGlobalJudges] = useState<string[]>([]);
 
   // Suggestion Generation State
   const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
@@ -265,41 +265,6 @@ export default function PromptOptimizer() {
     }
   };
 
-  const handleGlobalFix = async () => {
-    if (selectedGlobalJudges.length === 0 || !projectId) return;
-
-    if (!agentPrompt.trim()) {
-      toast({
-        title: "Agent Prompt Required",
-        description: "Please click 'Agent Master Prompt' and paste the Voice AI Agent's system prompt before generating a fix.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsGeneratingFix(true);
-    setActiveBucketIndex(-2); // -2 indicates "Global"
-    setOriginalPrompt(agentPrompt);
-    setIsGlobalFixOpen(false);
-
-    try {
-      const result = await api.optimizeGlobalPrompt(
-        projectId,
-        selectedGlobalJudges,
-        agentPrompt,
-        optimizerProvider,
-        optimizerModel,
-        optimizerTemperature
-      );
-      setNewPrompt(result.optimizedPrompt);
-      setIsDiffOpen(true);
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to generate global fix.", variant: "destructive" });
-    } finally {
-      setIsGeneratingFix(false);
-    }
-  };
-
   const handleAcceptChanges = async () => {
     if (activeBucketIndex === null) return;
     
@@ -310,21 +275,7 @@ export default function PromptOptimizer() {
     updateProjectMutation.mutate({ agentPrompt: newPrompt });
 
     // Mark bucket(s) as fixed
-    if (activeBucketIndex === -2) {
-      // Global Fix: Mark ALL buckets of SELECTED judges as fixed
-      const promises: Promise<void>[] = [];
-      selectedGlobalJudges.forEach(jId => {
-        const judgeOpts = project?.optimizations?.[jId];
-        if (judgeOpts?.buckets) {
-          judgeOpts.buckets.forEach((_, idx) => {
-            promises.push(api.markBucketFixed(projectId!, jId, idx));
-          });
-        }
-      });
-      await Promise.all(promises);
-      // Invalidate queries to refresh UI
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-    } else if (activeBucketIndex === -1) {
+    if (activeBucketIndex === -1) {
       // Mark ALL buckets of CURRENT judge as fixed
       if (optimizationResult?.buckets) {
         const promises = optimizationResult.buckets.map((_, idx) => 
@@ -369,8 +320,10 @@ export default function PromptOptimizer() {
             <p className="text-sm text-muted-foreground">Analyze errors and improve judge prompts</p>
           </div>
         </div>
+      </div>
         
-        <div className="flex items-center gap-4">
+      {/* Toolbar */}
+      <div className="border-b border-border px-6 py-3 flex items-center gap-4 shrink-0 bg-muted/30 overflow-x-auto">
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="icon" title="Optimizer Settings">
@@ -546,63 +499,6 @@ export default function PromptOptimizer() {
             )}
           </Button>
 
-          <Dialog open={isGlobalFixOpen} onOpenChange={setIsGlobalFixOpen}>
-            <DialogTrigger asChild>
-              <Button variant="default" className="bg-purple-600 hover:bg-purple-700">
-                <Wand2 className="mr-2 h-4 w-4" />
-                Global Fix
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Global Prompt Optimization</DialogTitle>
-                <DialogDescription>
-                  Select judges to include in the global optimization. This will analyze all pending errors from the selected judges and generate a single unified fix for the Master Prompt.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="py-4 space-y-4">
-                {judges.map(judge => {
-                  const hasOptimizations = project?.optimizations?.[judge.id]?.buckets?.some(b => !b.fixed);
-                  return (
-                    <div key={judge.id} className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`judge-${judge.id}`} 
-                        checked={selectedGlobalJudges.includes(judge.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedGlobalJudges([...selectedGlobalJudges, judge.id]);
-                          } else {
-                            setSelectedGlobalJudges(selectedGlobalJudges.filter(id => id !== judge.id));
-                          }
-                        }}
-                        disabled={!hasOptimizations}
-                      />
-                      <Label 
-                        htmlFor={`judge-${judge.id}`}
-                        className={!hasOptimizations ? "text-muted-foreground" : ""}
-                      >
-                        {judge.label_name} 
-                        {!hasOptimizations && " (No pending issues)"}
-                      </Label>
-                    </div>
-                  );
-                })}
-              </div>
-              <DialogFooter>
-                <Button onClick={handleGlobalFix} disabled={selectedGlobalJudges.length === 0 || isGeneratingFix}>
-                  {isGeneratingFix && activeBucketIndex === -2 ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Optimizing...
-                    </>
-                  ) : (
-                    "Generate Global Fix"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           <Button 
             onClick={() => optimizeMutation.mutate()} 
             disabled={!selectedJudgeId || optimizeMutation.isPending}
@@ -620,7 +516,6 @@ export default function PromptOptimizer() {
               </>
             )}
           </Button>
-        </div>
       </div>
 
       {/* Content */}
