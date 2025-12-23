@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const DiffViewer = ({ oldText, newText }: { oldText: string, newText: string }) => {
   const diff = Diff.diffLines(oldText, newText);
@@ -69,6 +70,15 @@ export default function PromptOptimizer() {
   const [agentPrompt, setAgentPrompt] = useState('');
   const [activeBucketIndex, setActiveBucketIndex] = useState<number | null>(null);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
+  
+  // Global Fix State
+  const [isGlobalFixOpen, setIsGlobalFixOpen] = useState(false);
+  const [selectedGlobalJudges, setSelectedGlobalJudges] = useState<string[]>([]);
+
+  // Suggestion Generation State
+  const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false);
+  const [selectedSuggestionJudges, setSelectedSuggestionJudges] = useState<string[]>([]);
+  const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
 
   // Optimizer Settings
   const [optimizerProvider, setOptimizerProvider] = useState<string>('openai');
@@ -162,6 +172,21 @@ export default function PromptOptimizer() {
     }
   });
 
+  const generateSuggestionsMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectId || !selectedJudgeId || !optimizationResult?.buckets || selectedSuggestionJudges.length === 0) return;
+      return api.generateGlobalSuggestions(projectId, selectedJudgeId, optimizationResult.buckets, selectedSuggestionJudges);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast({ title: "Success", description: "Global suggestions generated." });
+      setIsSuggestionDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to generate suggestions.", variant: "destructive" });
+    }
+  });
+
   const markFixedMutation = useMutation({
     mutationFn: async (bucketIndex: number) => {
       if (!projectId || !selectedJudgeId) return;
@@ -206,8 +231,77 @@ export default function PromptOptimizer() {
     }
   };
 
+  const handleFixAll = async () => {
+    if (!selectedJudge || !projectId) return;
+    
+    if (!agentPrompt.trim()) {
+      toast({
+        title: "Agent Prompt Required",
+        description: "Please click 'Agent Master Prompt' and paste the Voice AI Agent's system prompt before generating a fix.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsGeneratingFix(true);
+    setActiveBucketIndex(-1); // -1 indicates "All"
+    setOriginalPrompt(agentPrompt);
+
+    try {
+      const result = await api.optimizeJudgePromptAll(
+        projectId,
+        selectedJudgeId, 
+        agentPrompt,
+        optimizerProvider,
+        optimizerModel,
+        optimizerTemperature
+      );
+      setNewPrompt(result.optimizedPrompt);
+      setIsDiffOpen(true);
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to generate fix for all issues.", variant: "destructive" });
+    } finally {
+      setIsGeneratingFix(false);
+    }
+  };
+
+  const handleGlobalFix = async () => {
+    if (selectedGlobalJudges.length === 0 || !projectId) return;
+
+    if (!agentPrompt.trim()) {
+      toast({
+        title: "Agent Prompt Required",
+        description: "Please click 'Agent Master Prompt' and paste the Voice AI Agent's system prompt before generating a fix.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsGeneratingFix(true);
+    setActiveBucketIndex(-2); // -2 indicates "Global"
+    setOriginalPrompt(agentPrompt);
+    setIsGlobalFixOpen(false);
+
+    try {
+      const result = await api.optimizeGlobalPrompt(
+        projectId,
+        selectedGlobalJudges,
+        agentPrompt,
+        optimizerProvider,
+        optimizerModel,
+        optimizerTemperature
+      );
+      setNewPrompt(result.optimizedPrompt);
+      setIsDiffOpen(true);
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to generate global fix.", variant: "destructive" });
+    } finally {
+      setIsGeneratingFix(false);
+    }
+  };
+
   const handleAcceptChanges = async () => {
-    if (!selectedJudge || activeBucketIndex === null) return;
+    if (activeBucketIndex === null) return;
     
     // Update the local agent prompt state with the new version
     setAgentPrompt(newPrompt);
@@ -215,8 +309,33 @@ export default function PromptOptimizer() {
     // Save to project
     updateProjectMutation.mutate({ agentPrompt: newPrompt });
 
-    // Mark bucket as fixed
-    markFixedMutation.mutate(activeBucketIndex);
+    // Mark bucket(s) as fixed
+    if (activeBucketIndex === -2) {
+      // Global Fix: Mark ALL buckets of SELECTED judges as fixed
+      const promises: Promise<void>[] = [];
+      selectedGlobalJudges.forEach(jId => {
+        const judgeOpts = project?.optimizations?.[jId];
+        if (judgeOpts?.buckets) {
+          judgeOpts.buckets.forEach((_, idx) => {
+            promises.push(api.markBucketFixed(projectId!, jId, idx));
+          });
+        }
+      });
+      await Promise.all(promises);
+      // Invalidate queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    } else if (activeBucketIndex === -1) {
+      // Mark ALL buckets of CURRENT judge as fixed
+      if (optimizationResult?.buckets) {
+        const promises = optimizationResult.buckets.map((_, idx) => 
+          api.markBucketFixed(projectId!, selectedJudgeId, idx)
+        );
+        await Promise.all(promises);
+        queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      }
+    } else {
+      markFixedMutation.mutate(activeBucketIndex);
+    }
     
     toast({ 
       title: "Prompt Updated", 
@@ -354,6 +473,136 @@ export default function PromptOptimizer() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={isSuggestionDialogOpen} onOpenChange={setIsSuggestionDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                disabled={!optimizationResult?.buckets || optimizationResult.buckets.length === 0}
+                className="border-dashed"
+              >
+                <Lightbulb className="mr-2 h-4 w-4" />
+                Generate Suggestions
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Generate Global Suggestions</DialogTitle>
+                <DialogDescription>
+                  Select judges to consider when generating corrected responses. The suggestions will satisfy the rules of ALL selected judges.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                {judges.map(judge => (
+                  <div key={judge.id} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`sugg-judge-${judge.id}`} 
+                      checked={selectedSuggestionJudges.includes(judge.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedSuggestionJudges([...selectedSuggestionJudges, judge.id]);
+                        } else {
+                          setSelectedSuggestionJudges(selectedSuggestionJudges.filter(id => id !== judge.id));
+                        }
+                      }}
+                    />
+                    <Label htmlFor={`sugg-judge-${judge.id}`}>{judge.label_name}</Label>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button 
+                  onClick={() => generateSuggestionsMutation.mutate()} 
+                  disabled={selectedSuggestionJudges.length === 0 || generateSuggestionsMutation.isPending}
+                >
+                  {generateSuggestionsMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    "Generate Suggestions"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Button 
+            onClick={handleFixAll}
+            disabled={!selectedJudgeId || isGeneratingFix || !optimizationResult?.buckets.some(b => !b.fixed)}
+            variant="secondary"
+            className="min-w-[140px]"
+          >
+            {isGeneratingFix && activeBucketIndex === -1 ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Fixing All...
+              </>
+            ) : (
+              <>
+                <Wand2 className="mr-2 h-4 w-4" />
+                Fix All Issues
+              </>
+            )}
+          </Button>
+
+          <Dialog open={isGlobalFixOpen} onOpenChange={setIsGlobalFixOpen}>
+            <DialogTrigger asChild>
+              <Button variant="default" className="bg-purple-600 hover:bg-purple-700">
+                <Wand2 className="mr-2 h-4 w-4" />
+                Global Fix
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Global Prompt Optimization</DialogTitle>
+                <DialogDescription>
+                  Select judges to include in the global optimization. This will analyze all pending errors from the selected judges and generate a single unified fix for the Master Prompt.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                {judges.map(judge => {
+                  const hasOptimizations = project?.optimizations?.[judge.id]?.buckets?.some(b => !b.fixed);
+                  return (
+                    <div key={judge.id} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`judge-${judge.id}`} 
+                        checked={selectedGlobalJudges.includes(judge.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedGlobalJudges([...selectedGlobalJudges, judge.id]);
+                          } else {
+                            setSelectedGlobalJudges(selectedGlobalJudges.filter(id => id !== judge.id));
+                          }
+                        }}
+                        disabled={!hasOptimizations}
+                      />
+                      <Label 
+                        htmlFor={`judge-${judge.id}`}
+                        className={!hasOptimizations ? "text-muted-foreground" : ""}
+                      >
+                        {judge.label_name} 
+                        {!hasOptimizations && " (No pending issues)"}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+              <DialogFooter>
+                <Button onClick={handleGlobalFix} disabled={selectedGlobalJudges.length === 0 || isGeneratingFix}>
+                  {isGeneratingFix && activeBucketIndex === -2 ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Optimizing...
+                    </>
+                  ) : (
+                    "Generate Global Fix"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button 
             onClick={() => optimizeMutation.mutate()} 
             disabled={!selectedJudgeId || optimizeMutation.isPending}
@@ -447,9 +696,15 @@ export default function PromptOptimizer() {
 
                             <div>
                               <span className="text-xs font-bold uppercase text-green-600 mb-2 block">Suggested Correction</span>
-                              <p className="text-sm leading-relaxed bg-green-50 dark:bg-green-900/20 p-3 rounded border border-green-100 dark:border-green-900/30 text-green-900 dark:text-green-100">
-                                {example.suggestion}
-                              </p>
+                              {example.suggestion ? (
+                                <p className="text-sm leading-relaxed bg-green-50 dark:bg-green-900/20 p-3 rounded border border-green-100 dark:border-green-900/30 text-green-900 dark:text-green-100">
+                                  {example.suggestion}
+                                </p>
+                              ) : (
+                                <div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded border border-dashed">
+                                  No suggestion generated yet. Click "Generate Suggestions" above to create corrections that satisfy multiple judges.
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

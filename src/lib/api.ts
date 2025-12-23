@@ -178,6 +178,36 @@ export const api = {
     return res.json();
   },
 
+  optimizeJudgePromptAll: async (projectId: string, judgeId: string, agentPrompt?: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, optimizedPrompt: string }> => {
+    const res = await fetch(`${API_BASE}/optimize-judge-prompt/all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, judgeId, agentPrompt, provider, model, temperature }),
+    });
+    if (!res.ok) throw new Error('Failed to generate optimized prompt');
+    return res.json();
+  },
+
+  optimizeGlobalPrompt: async (projectId: string, judgeIds: string[], agentPrompt?: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, optimizedPrompt: string }> => {
+    const res = await fetch(`${API_BASE}/optimize-global-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, judgeIds, agentPrompt, provider, model, temperature }),
+    });
+    if (!res.ok) throw new Error('Failed to generate global optimized prompt');
+    return res.json();
+  },
+
+  generateGlobalSuggestions: async (projectId: string, sourceJudgeId: string, buckets: any[], judgeIds: string[]): Promise<{ success: boolean, buckets: any[] }> => {
+    const res = await fetch(`${API_BASE}/generate-global-suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, sourceJudgeId, buckets, judgeIds }),
+    });
+    if (!res.ok) throw new Error('Failed to generate global suggestions');
+    return res.json();
+  },
+
   markBucketFixed: async (projectId: string, judgeId: string, bucketIndex: number): Promise<void> => {
     const res = await fetch(`${API_BASE}/projects/${projectId}/optimizations/${judgeId}/buckets/${bucketIndex}/fix`, {
       method: 'POST',

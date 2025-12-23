@@ -719,10 +719,9 @@ app.post('/api/optimize-prompt', async (req, res) => {
                   properties: {
                     conversationId: { type: "string" },
                     turnIndex: { type: "number" },
-                    reason: { type: "string" },
-                    suggestion: { type: "string" }
+                    reason: { type: "string" }
                   },
-                  required: ["conversationId", "turnIndex", "reason", "suggestion"]
+                  required: ["conversationId", "turnIndex", "reason"]
                 }
               }
             },
@@ -754,8 +753,6 @@ For each bucket, you must provide:
 2. Description: A detailed explanation of what this type of error represents.
 3. Examples: Select 1-2 representative examples from the provided list. For each example, provide:
     - The original error reason.
-    - A "Corrected Response": Rewrite the assistant's response to fix the error.
-      CRITICAL: The corrected response MUST strictly adhere to ALL rules and guidelines defined in the "Judge Information" prompt provided above. It must fix the specific error while remaining compliant with all other constraints (e.g., language, tone, length, formatting).
 
 Use the provided tool to submit your analysis.`,
       messages: [
@@ -841,6 +838,148 @@ Use the provided tool to submit your analysis.`,
         console.error('LLM response data:', error.response.data);
     }
     res.status(500).json({ error: 'Optimization failed', details: error.message });
+  }
+});
+
+// Generate Global Suggestions
+app.post('/api/generate-global-suggestions', async (req, res) => {
+  const { projectId, sourceJudgeId, buckets, judgeIds } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const judges = db.judges.filter(j => judgeIds.includes(j.id));
+  if (judges.length === 0) return res.status(404).json({ error: 'No judges found' });
+
+  try {
+    const tool = {
+      name: "global_suggestion_result",
+      description: "Submit the updated buckets with global suggestions.",
+      properties: {
+        buckets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              examples: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    conversationId: { type: "string" },
+                    turnIndex: { type: "number" },
+                    suggestion: { type: "string" }
+                  },
+                  required: ["conversationId", "turnIndex", "suggestion"]
+                }
+              }
+            },
+            required: ["title", "examples"]
+          }
+        }
+      },
+      required: ["buckets"]
+    };
+
+    const judgesInfo = judges.map(j => `
+Judge Name: ${j.label_name}
+Description: ${j.description}
+Prompt: ${j.prompt}
+---`).join('\n');
+
+    const payload = {
+      config: {
+        provider: "openai", // Use a capable model for this complex task
+        model: "gpt-4o",
+        temperature: 0.4
+      },
+      prompt: `You are an expert prompt engineer.
+Your task is to generate "Corrected Responses" for a set of error examples.
+CRITICAL: The corrected response must satisfy the rules and guidelines of ALL the following judges simultaneously.
+
+Judges Information:
+${judgesInfo}
+
+I will provide a list of error buckets with examples. Each example includes the conversation context and the original error reason.
+
+For each example in the buckets, provide a "suggestion" (Corrected Response).
+The suggestion must:
+1. Fix the specific error identified in the example.
+2. Strictly adhere to ALL rules from ALL provided judges.
+3. Be a complete, valid response that could replace the original assistant response.
+
+Use the provided tool to submit the updated buckets with suggestions.`,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify(buckets, null, 2)
+        }
+      ],
+      tool: tool
+    };
+
+    const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    let result = response.data;
+    
+    // Parsing logic similar to optimize-prompt
+    if (typeof result === 'string') {
+        try {
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
+        } catch (e) {
+            console.error('Failed to parse Global Suggestion result:', e);
+        }
+    }
+    if (result && result.message) {
+        result = result.message;
+    }
+    if (typeof result === 'string') {
+        try {
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
+        } catch (e) {
+            console.error('Failed to parse inner result:', e);
+        }
+    }
+
+    // Merge suggestions back into the original buckets structure
+    // We only asked for title and examples with suggestions to save tokens/complexity, 
+    // so we need to map them back to the full bucket objects.
+    const updatedBuckets = buckets.map(bucket => {
+        const resultBucket = result.buckets ? result.buckets.find(b => b.title === bucket.title) : null;
+        if (resultBucket) {
+            return {
+                ...bucket,
+                examples: bucket.examples.map(ex => {
+                    const resultEx = resultBucket.examples.find(e => e.conversationId === ex.conversationId && e.turnIndex === ex.turnIndex);
+                    return {
+                        ...ex,
+                        suggestion: resultEx ? resultEx.suggestion : ex.suggestion
+                    };
+                })
+            };
+        }
+        return bucket;
+    });
+
+    // Save updated buckets to project
+    if (project.optimizations && project.optimizations[sourceJudgeId]) {
+        project.optimizations[sourceJudgeId].buckets = updatedBuckets;
+        saveDb();
+    }
+
+    res.json({ success: true, buckets: updatedBuckets });
+
+  } catch (error) {
+    console.error('Global Suggestion error:', error.message);
+    if (error.response) {
+        console.error('LLM response data:', error.response.data);
+    }
+    res.status(500).json({ error: 'Global Suggestion failed', details: error.message });
   }
 });
 
@@ -960,6 +1099,242 @@ app.post('/api/optimize-judge-prompt', async (req, res) => {
 
   } catch (error) {
     console.error('Prompt optimization error:', error.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Prompt optimization failed', details: error.message });
+  }
+});
+
+// Optimize Judge Prompt (All Buckets)
+app.post('/api/optimize-judge-prompt/all', async (req, res) => {
+  const { projectId, judgeId, agentPrompt, provider, model, temperature } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const judge = db.judges.find(j => j.id === judgeId);
+  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+
+  if (!project.optimizations || !project.optimizations[judgeId]) {
+    return res.status(404).json({ error: 'No optimizations found for this judge' });
+  }
+
+  // Collect all examples from all non-fixed buckets
+  const allExamples = [];
+  project.optimizations[judgeId].buckets.forEach(bucket => {
+    if (!bucket.fixed) {
+      allExamples.push(...bucket.examples);
+    }
+  });
+
+  if (allExamples.length === 0) {
+    return res.status(400).json({ error: 'No pending issues to fix' });
+  }
+
+  try {
+    const pythonScript = path.join(__dirname, 'optimize_prompt.py');
+    
+    // Robust Python detection
+    const possiblePaths = [
+      path.join(__dirname, '../.venv/bin/python3.11'),
+      path.join(__dirname, '../.venv/bin/python3.10'),
+      path.join(__dirname, '../.venv/bin/python3'),
+      path.join(__dirname, '../.venv/bin/python'),
+      path.join(__dirname, '.venv/bin/python3.11'),
+      path.join(__dirname, '.venv/bin/python3.10'),
+      path.join(__dirname, '.venv/bin/python3'),
+      path.join(__dirname, '.venv/bin/python'),
+      path.join(__dirname, '../.venv/Scripts/python.exe'),
+      path.join(__dirname, '.venv/Scripts/python.exe'),
+    ];
+    
+    let pythonExecutable = 'python';
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        pythonExecutable = p;
+        break;
+      }
+    }
+    
+    const pythonProcess = spawn(pythonExecutable, [pythonScript]);
+
+    let outputData = '';
+    let errorData = '';
+
+    pythonProcess.stdout.on('data', (data) => { outputData += data.toString(); });
+    pythonProcess.stderr.on('data', (data) => { errorData += data.toString(); });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error('[Optimize All] Python script exited with code:', code);
+        console.error('[Optimize All] Stderr:', errorData);
+        
+        let errorMsg = errorData;
+        try {
+            if (outputData.trim()) {
+                const result = JSON.parse(outputData);
+                if (result.error) errorMsg = result.error;
+            }
+        } catch (e) {}
+        
+        if (!res.headersSent) {
+            return res.status(500).json({ error: 'Prompt optimization failed', details: errorMsg || 'Unknown error' });
+        }
+        return;
+      }
+
+      try {
+        const result = JSON.parse(outputData);
+        if (result.error) {
+             if (!res.headersSent) return res.status(500).json({ error: result.error });
+        }
+        if (!res.headersSent) res.json({ success: true, optimizedPrompt: result.optimizedPrompt });
+      } catch (e) {
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to parse optimization result', details: outputData });
+      }
+    });
+
+    const selectedProvider = provider || judge.provider || 'openai';
+    const selectedModel = model || judge.model || 'gpt-4o';
+    const selectedTemperature = temperature !== undefined ? parseFloat(temperature) : 0;
+    const promptToOptimize = agentPrompt || judge.prompt;
+    const apiKeyEnvVar = `${selectedProvider.toUpperCase()}_API_KEY`;
+    const apiKey = process.env[apiKeyEnvVar];
+
+    const inputData = {
+      current_prompt: promptToOptimize,
+      examples: allExamples,
+      provider: selectedProvider,
+      model: selectedModel,
+      temperature: selectedTemperature,
+      api_key: apiKey
+    };
+
+    pythonProcess.stdin.write(JSON.stringify(inputData));
+    pythonProcess.stdin.end();
+
+  } catch (error) {
+    if (!res.headersSent) res.status(500).json({ error: 'Prompt optimization failed', details: error.message });
+  }
+});
+
+// Optimize Global Prompt (Multiple Judges)
+app.post('/api/optimize-global-prompt', async (req, res) => {
+  const { projectId, judgeIds, agentPrompt, provider, model, temperature } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  if (!project.optimizations) {
+    return res.status(400).json({ error: 'No optimizations found' });
+  }
+
+  // Collect all examples from all non-fixed buckets of selected judges
+  const allExamples = [];
+  
+  for (const judgeId of judgeIds) {
+    if (project.optimizations[judgeId]) {
+      project.optimizations[judgeId].buckets.forEach(bucket => {
+        if (!bucket.fixed) {
+          // Add judge info to the reason to help the optimizer distinguish sources
+          const judge = db.judges.find(j => j.id === judgeId);
+          const judgeName = judge ? judge.label_name : 'Unknown Judge';
+          
+          const enrichedExamples = bucket.examples.map(ex => ({
+            ...ex,
+            reason: `[${judgeName}] ${ex.reason}`
+          }));
+          
+          allExamples.push(...enrichedExamples);
+        }
+      });
+    }
+  }
+
+  if (allExamples.length === 0) {
+    return res.status(400).json({ error: 'No pending issues to fix for selected judges' });
+  }
+
+  try {
+    const pythonScript = path.join(__dirname, 'optimize_prompt.py');
+    
+    // Robust Python detection
+    const possiblePaths = [
+      path.join(__dirname, '../.venv/bin/python3.11'),
+      path.join(__dirname, '../.venv/bin/python3.10'),
+      path.join(__dirname, '../.venv/bin/python3'),
+      path.join(__dirname, '../.venv/bin/python'),
+      path.join(__dirname, '.venv/bin/python3.11'),
+      path.join(__dirname, '.venv/bin/python3.10'),
+      path.join(__dirname, '.venv/bin/python3'),
+      path.join(__dirname, '.venv/bin/python'),
+      path.join(__dirname, '../.venv/Scripts/python.exe'),
+      path.join(__dirname, '.venv/Scripts/python.exe'),
+    ];
+    
+    let pythonExecutable = 'python';
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        pythonExecutable = p;
+        break;
+      }
+    }
+    
+    const pythonProcess = spawn(pythonExecutable, [pythonScript]);
+
+    let outputData = '';
+    let errorData = '';
+
+    pythonProcess.stdout.on('data', (data) => { outputData += data.toString(); });
+    pythonProcess.stderr.on('data', (data) => { errorData += data.toString(); });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error('[Global Optimize] Python script exited with code:', code);
+        console.error('[Global Optimize] Stderr:', errorData);
+        
+        let errorMsg = errorData;
+        try {
+            if (outputData.trim()) {
+                const result = JSON.parse(outputData);
+                if (result.error) errorMsg = result.error;
+            }
+        } catch (e) {}
+        
+        if (!res.headersSent) {
+            return res.status(500).json({ error: 'Prompt optimization failed', details: errorMsg || 'Unknown error' });
+        }
+        return;
+      }
+
+      try {
+        const result = JSON.parse(outputData);
+        if (result.error) {
+             if (!res.headersSent) return res.status(500).json({ error: result.error });
+        }
+        if (!res.headersSent) res.json({ success: true, optimizedPrompt: result.optimizedPrompt });
+      } catch (e) {
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to parse optimization result', details: outputData });
+      }
+    });
+
+    const selectedProvider = provider || 'openai';
+    const selectedModel = model || 'gpt-4o';
+    const selectedTemperature = temperature !== undefined ? parseFloat(temperature) : 0;
+    const apiKeyEnvVar = `${selectedProvider.toUpperCase()}_API_KEY`;
+    const apiKey = process.env[apiKeyEnvVar];
+
+    const inputData = {
+      current_prompt: agentPrompt,
+      examples: allExamples,
+      provider: selectedProvider,
+      model: selectedModel,
+      temperature: selectedTemperature,
+      api_key: apiKey
+    };
+
+    pythonProcess.stdin.write(JSON.stringify(inputData));
+    pythonProcess.stdin.end();
+
+  } catch (error) {
     if (!res.headersSent) res.status(500).json({ error: 'Prompt optimization failed', details: error.message });
   }
 });
