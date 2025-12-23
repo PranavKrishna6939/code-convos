@@ -843,7 +843,7 @@ Use the provided tool to submit your analysis.`,
 
 // Generate Global Suggestions
 app.post('/api/generate-global-suggestions', async (req, res) => {
-  const { projectId, sourceJudgeId, buckets, judgeIds } = req.body;
+  const { projectId, judgeIds } = req.body;
 
   const project = db.projects.find(p => p.id === projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -888,13 +888,22 @@ Description: ${j.description}
 Prompt: ${j.prompt}
 ---`).join('\n');
 
-    const payload = {
-      config: {
-        provider: "openai", // Use a capable model for this complex task
-        model: "gpt-4o",
-        temperature: 0.4
-      },
-      prompt: `You are an expert prompt engineer and compliance officer.
+    // Process each judge that has buckets
+    const processingPromises = judgeIds.map(async (targetJudgeId) => {
+        const judgeOptimizations = project.optimizations ? project.optimizations[targetJudgeId] : null;
+        if (!judgeOptimizations || !judgeOptimizations.buckets || judgeOptimizations.buckets.length === 0) {
+            return null; // Skip if no buckets
+        }
+
+        const buckets = judgeOptimizations.buckets;
+
+        const payload = {
+            config: {
+                provider: "openai",
+                model: "gpt-4o",
+                temperature: 0.4
+            },
+            prompt: `You are an expert prompt engineer and compliance officer.
 Your task is to generate "Corrected Responses" for a set of error examples.
 
 CRITICAL INSTRUCTIONS:
@@ -916,75 +925,73 @@ The suggestion must:
 - NOT explain the correction, just provide the corrected response text.
 
 Use the provided tool to submit the updated buckets with suggestions.`,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify(buckets, null, 2)
-        }
-      ],
-      tool: tool
-    };
+            messages: [
+                {
+                    role: "user",
+                    content: JSON.stringify(buckets, null, 2)
+                }
+            ],
+            tool: tool
+        };
 
-    const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    let result = response.data;
-    
-    // Parsing logic similar to optimize-prompt
-    if (typeof result === 'string') {
         try {
-            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
-            result = JSON.parse(cleanResult);
-        } catch (e) {
-            console.error('Failed to parse Global Suggestion result:', e);
-        }
-    }
-    if (result && result.message) {
-        result = result.message;
-    }
-    if (typeof result === 'string') {
-        try {
-            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
-            result = JSON.parse(cleanResult);
-        } catch (e) {
-            console.error('Failed to parse inner result:', e);
-        }
-    }
+            const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
+                headers: { 'Content-Type': 'application/json' }
+            });
 
-    // Merge suggestions back into the original buckets structure
-    // We only asked for title and examples with suggestions to save tokens/complexity, 
-    // so we need to map them back to the full bucket objects.
-    const updatedBuckets = buckets.map(bucket => {
-        const resultBucket = result.buckets ? result.buckets.find(b => b.title === bucket.title) : null;
-        if (resultBucket) {
-            return {
-                ...bucket,
-                examples: bucket.examples.map(ex => {
-                    const resultEx = resultBucket.examples.find(e => e.conversationId === ex.conversationId && e.turnIndex === ex.turnIndex);
+            let result = response.data;
+            if (typeof result === 'string') {
+                try {
+                    const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+                    result = JSON.parse(cleanResult);
+                } catch (e) { console.error('Failed to parse result:', e); }
+            }
+            if (result && result.message) result = result.message;
+            if (typeof result === 'string') {
+                try {
+                    const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+                    result = JSON.parse(cleanResult);
+                } catch (e) { console.error('Failed to parse inner result:', e); }
+            }
+
+            // Merge suggestions
+            const updatedBuckets = buckets.map(bucket => {
+                const resultBucket = result.buckets ? result.buckets.find(b => b.title === bucket.title) : null;
+                if (resultBucket) {
                     return {
-                        ...ex,
-                        suggestion: resultEx ? resultEx.suggestion : ex.suggestion
+                        ...bucket,
+                        examples: bucket.examples.map(ex => {
+                            const resultEx = resultBucket.examples.find(e => e.conversationId === ex.conversationId && e.turnIndex === ex.turnIndex);
+                            return {
+                                ...ex,
+                                suggestion: resultEx ? resultEx.suggestion : ex.suggestion
+                            };
+                        })
                     };
-                })
-            };
+                }
+                return bucket;
+            });
+
+            // Update project in memory (will be saved after all promises resolve)
+            if (!project.optimizations) project.optimizations = {};
+            if (!project.optimizations[targetJudgeId]) project.optimizations[targetJudgeId] = {};
+            project.optimizations[targetJudgeId].buckets = updatedBuckets;
+            
+            return { judgeId: targetJudgeId, success: true };
+
+        } catch (err) {
+            console.error(`Failed to generate suggestions for judge ${targetJudgeId}:`, err.message);
+            return { judgeId: targetJudgeId, success: false, error: err.message };
         }
-        return bucket;
     });
 
-    // Save updated buckets to project
-    if (project.optimizations && project.optimizations[sourceJudgeId]) {
-        project.optimizations[sourceJudgeId].buckets = updatedBuckets;
-        saveDb();
-    }
+    await Promise.all(processingPromises);
+    saveDb();
 
-    res.json({ success: true, buckets: updatedBuckets });
+    res.json({ success: true });
 
   } catch (error) {
     console.error('Global Suggestion error:', error.message);
-    if (error.response) {
-        console.error('LLM response data:', error.response.data);
-    }
     res.status(500).json({ error: 'Global Suggestion failed', details: error.message });
   }
 });

@@ -198,11 +198,11 @@ export const api = {
     return res.json();
   },
 
-  generateGlobalSuggestions: async (projectId: string, sourceJudgeId: string, buckets: any[], judgeIds: string[]): Promise<{ success: boolean, buckets: any[] }> => {
+  generateGlobalSuggestions: async (projectId: string, judgeIds: string[]): Promise<{ success: boolean }> => {
     const res = await fetch(`${API_BASE}/generate-global-suggestions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, sourceJudgeId, buckets, judgeIds }),
+      body: JSON.stringify({ projectId, judgeIds }),
     });
     if (!res.ok) throw new Error('Failed to generate global suggestions');
     return res.json();

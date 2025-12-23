@@ -174,8 +174,8 @@ export default function PromptOptimizer() {
 
   const generateSuggestionsMutation = useMutation({
     mutationFn: async () => {
-      if (!projectId || !selectedJudgeId || !optimizationResult?.buckets || selectedSuggestionJudges.length === 0) return;
-      return api.generateGlobalSuggestions(projectId, selectedJudgeId, optimizationResult.buckets, selectedSuggestionJudges);
+      if (!projectId || selectedSuggestionJudges.length === 0) return;
+      return api.generateGlobalSuggestions(projectId, selectedSuggestionJudges);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
@@ -430,7 +430,6 @@ export default function PromptOptimizer() {
             <DialogTrigger asChild>
               <Button 
                 variant="outline" 
-                disabled={!optimizationResult?.buckets || optimizationResult.buckets.length === 0}
                 className="border-dashed"
               >
                 <Lightbulb className="mr-2 h-4 w-4" />
@@ -441,7 +440,7 @@ export default function PromptOptimizer() {
               <DialogHeader>
                 <DialogTitle>Generate Global Suggestions</DialogTitle>
                 <DialogDescription>
-                  Select judges to consider when generating corrected responses. The suggestions will satisfy the rules of ALL selected judges.
+                  Select judges to include. Suggestions will be generated for ALL selected judges' errors, ensuring compliance with ALL selected judges' rules.
                 </DialogDescription>
               </DialogHeader>
               <div className="py-4 space-y-4">
