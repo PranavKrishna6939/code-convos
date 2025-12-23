@@ -764,6 +764,10 @@ Use the provided tool to submit your analysis.`,
       tool: tool
     };
 
+    console.log('--- OPTIMIZE PROMPT REQUEST ---');
+    console.log(JSON.stringify(payload, null, 2));
+    console.log('-------------------------------');
+
     const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -933,6 +937,10 @@ Use the provided tool to submit the updated buckets with suggestions.`,
             ],
             tool: tool
         };
+
+        console.log('--- GENERATE GLOBAL SUGGESTIONS REQUEST ---');
+        console.log(JSON.stringify(payload, null, 2));
+        console.log('-------------------------------------------');
 
         try {
             const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
