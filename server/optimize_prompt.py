@@ -5,6 +5,7 @@ import os
 try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.messages import SystemMessage
     from langchain_openai import ChatOpenAI
     from langchain_google_genai import ChatGoogleGenerativeAI
 except ImportError as e:
@@ -33,7 +34,7 @@ def main():
     # Check for variable syntax in current prompt
     preserve_syntax_instruction = ""
     if "${" in current_prompt:
-        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${{variable}} syntax for all variables. Do NOT change them to {{variable}}."
+        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${variable} syntax for all variables. Do NOT change them to {variable}."
 
     # Construct trajectories
     trajectories_text = ""
@@ -71,32 +72,15 @@ def main():
         
         # Use custom meta prompt if provided, otherwise fallback to a default
         if not meta_prompt:
-            meta_prompt = """You are an expert prompt engineer.
-Your task is to optimize a system prompt to address specific failure cases while preserving the original behavior for correct cases.
-
-I will provide:
-1. The Current System Prompt.
-2. A list of "Trajectories" (Conversation History + Feedback).
-
-Each trajectory represents a case where the current prompt failed. The feedback explains the error and provides a suggestion.
-
-Your Goal:
-Rewrite the system prompt to fix the errors described in the feedback.
-
-Guidelines:
-- The new prompt must be clear, concise, and instruction-following.
-- Do NOT remove existing instructions unless they directly conflict with the fix.
-- Integrate the new rules naturally into the prompt structure.
-- If the current prompt uses variable placeholders like ${{variable}}, you MUST preserve them exactly.
-
-Output ONLY the optimized system prompt text. Do not include explanations or markdown formatting."""
+             print(json.dumps({"error": "Missing meta_prompt in input"}))
+             sys.exit(1)
 
         # Append the preserve syntax instruction if needed
         if preserve_syntax_instruction:
             meta_prompt += "\n" + preserve_syntax_instruction
 
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", meta_prompt),
+            SystemMessage(content=meta_prompt),
             ("user", "Current System Prompt:\n{current_prompt}\n\nTrajectories:\n{trajectories}")
         ])
 

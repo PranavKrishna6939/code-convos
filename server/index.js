@@ -37,20 +37,87 @@ function saveDb() {
 }
 
 const META_PROMPTS_FILE = path.join(__dirname, 'meta_prompts.json');
-let metaPrompts = {
-  bucketing: '',
-  suggestions: '',
-  optimization: ''
+
+const DEFAULT_META_PROMPTS = {
+  bucketing: `You are an expert prompt engineer and data analyst.
+Your task is to analyze a set of errors detected by an LLM judge and categorize them into 2-3 distinct "buckets" or categories based on the root cause or type of failure.
+
+Judge Information:
+Name: \${judge.label_name}
+Description: \${judge.description}
+Prompt: \${judge.prompt}
+
+I will provide a list of errors. Each error includes the conversation context (User query, Assistant response, User follow-up) and the reason why it was marked as an error.
+
+CRITICAL INSTRUCTIONS:
+1. You must strictly use the 'reason' field provided in the input for each example. Do not paraphrase, invent, or hallucinate new reasons.
+2. Do not combine multiple distinct errors into a single example unless they are identical.
+3. Ensure that the 'conversationId' and 'turnIndex' in your output exactly match the input.
+
+For each bucket, you must provide:
+1. Title: A short, descriptive title for the category.
+2. Description: A detailed explanation of what this type of error represents.
+3. Examples: Select 1-2 representative examples from the provided list. For each example, provide:
+    - The original error reason (verbatim from input).
+
+Use the provided tool to submit your analysis.`,
+  suggestions: `You are an expert prompt engineer and compliance officer.
+Your task is to generate "Corrected Responses" for a set of error examples.
+
+CRITICAL INSTRUCTIONS:
+1. The corrected response must satisfy the rules and guidelines of ALL the following judges simultaneously.
+2. The corrected response must specifically resolve the error described in the "reason" field of the example.
+3. If there is a conflict between judges, prioritize the most restrictive rule, but aim to satisfy both.
+4. The response must be natural and conversational while strictly adhering to the constraints.
+5. OUTPUT COMPLETENESS: You must generate a suggestion for EVERY single example provided in the input JSON. Do not skip any examples. If a bucket has 3 examples, you must return 3 suggestions for that bucket.
+
+Judges Information:
+\${judgesInfo}
+
+I will provide a list of error buckets with examples. Each example includes the conversation context and the original error reason.
+
+For each example in the buckets, provide a "suggestion" (Corrected Response).
+The suggestion must:
+- Fix the specific error identified in the example.
+- Strictly adhere to ALL rules from ALL provided judges.
+- Be a complete, valid response that could replace the original assistant response.
+- NOT explain the correction, just provide the corrected response text.
+
+Use the provided tool to submit the updated buckets with suggestions.`,
+  optimization: `You are an expert prompt engineer.
+Your task is to optimize a system prompt to address specific failure cases while preserving the original behavior for correct cases.
+
+I will provide:
+1. The Current System Prompt.
+2. A list of "Trajectories" (Conversation History + Feedback).
+
+Each trajectory represents a case where the current prompt failed. The feedback explains the error and provides a suggestion.
+
+Your Goal:
+Rewrite the system prompt to fix the errors described in the feedback.
+
+Guidelines:
+- The new prompt must be clear, concise, and instruction-following.
+- Do NOT remove existing instructions unless they directly conflict with the fix.
+- Integrate the new rules naturally into the prompt structure.
+- If the current prompt uses variable placeholders like \${variable}, you MUST preserve them exactly.
+
+Output ONLY the optimized system prompt text. Do not include explanations or markdown formatting.`
 };
+
+let metaPrompts = { ...DEFAULT_META_PROMPTS };
 
 function loadMetaPrompts() {
   if (fs.existsSync(META_PROMPTS_FILE)) {
     try {
       const data = fs.readFileSync(META_PROMPTS_FILE, 'utf8');
-      metaPrompts = JSON.parse(data);
+      const loaded = JSON.parse(data);
+      metaPrompts = { ...DEFAULT_META_PROMPTS, ...loaded };
     } catch (err) {
       console.error('Error reading Meta Prompts file:', err);
     }
+  } else {
+    saveMetaPrompts();
   }
 }
 
