@@ -1224,7 +1224,8 @@ app.post('/api/optimize-judge-prompt/all', async (req, res) => {
       provider: selectedProvider,
       model: selectedModel,
       temperature: selectedTemperature,
-      api_key: apiKey
+      api_key: apiKey,
+      meta_prompt: metaPrompts.optimization
     };
 
     pythonProcess.stdin.write(JSON.stringify(inputData));

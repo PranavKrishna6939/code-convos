@@ -81,8 +81,8 @@ export default function PromptOptimizer() {
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
 
   // Optimizer Settings
-  const [optimizerProvider, setOptimizerProvider] = useState<string>('openai');
-  const [optimizerModel, setOptimizerModel] = useState<string>('gpt-4.1');
+  const [optimizerProvider, setOptimizerProvider] = useState<string>('google');
+  const [optimizerModel, setOptimizerModel] = useState<string>('gemini-3-flash-preview');
   const [optimizerTemperature, setOptimizerTemperature] = useState<number>(0.2);
 
   // Meta Prompts State

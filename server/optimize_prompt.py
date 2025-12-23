@@ -21,9 +21,9 @@ def main():
 
     current_prompt = input_data.get("current_prompt")
     examples = input_data.get("examples", [])
-    provider = input_data.get("provider", "openai")
-    model_name = input_data.get("model", "gpt-4o")
-    temperature = input_data.get("temperature", 0.0)
+    provider = input_data.get("provider", "google")
+    model_name = input_data.get("model", "gemini-3-flash-preview")
+    temperature = input_data.get("temperature", 0.2)
     meta_prompt = input_data.get("meta_prompt", "")
     
     if not current_prompt:
@@ -33,7 +33,7 @@ def main():
     # Check for variable syntax in current prompt
     preserve_syntax_instruction = ""
     if "${" in current_prompt:
-        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${variable} syntax for all variables. Do NOT change them to {{variable}}."
+        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${{variable}} syntax for all variables. Do NOT change them to {{variable}}."
 
     # Construct trajectories
     trajectories_text = ""
@@ -87,7 +87,7 @@ Guidelines:
 - The new prompt must be clear, concise, and instruction-following.
 - Do NOT remove existing instructions unless they directly conflict with the fix.
 - Integrate the new rules naturally into the prompt structure.
-- If the current prompt uses variable placeholders like ${variable}, you MUST preserve them exactly.
+- If the current prompt uses variable placeholders like ${{variable}}, you MUST preserve them exactly.
 
 Output ONLY the optimized system prompt text. Do not include explanations or markdown formatting."""
 
