@@ -1,9 +1,8 @@
 import sys
 import json
 import os
-from langmem import create_prompt_optimizer
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 def main():
     # Read input from stdin
@@ -18,6 +17,7 @@ def main():
     provider = input_data.get("provider", "openai")
     model_name = input_data.get("model", "gpt-4o")
     temperature = input_data.get("temperature", 0.0)
+    meta_prompt = input_data.get("meta_prompt", "")
     
     if not current_prompt:
         print(json.dumps({"error": "Missing current_prompt"}))
@@ -29,26 +29,21 @@ def main():
         preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${variable} syntax for all variables. Do NOT change them to {variable}."
 
     # Construct trajectories
-    trajectories = []
-    for ex in examples:
-        messages = []
+    trajectories_text = ""
+    for i, ex in enumerate(examples):
         context = ex.get("context", {})
         
+        trajectories_text += f"\n--- Example {i+1} ---\n"
         if context.get("user_before"):
-            messages.append({"role": "user", "content": context["user_before"]})
-        
+            trajectories_text += f"User: {context['user_before']}\n"
         if context.get("assistant"):
-            messages.append({"role": "assistant", "content": context["assistant"]})
-            
+            trajectories_text += f"Assistant: {context['assistant']}\n"
         if context.get("user_after"):
-            messages.append({"role": "user", "content": context["user_after"]})
+            trajectories_text += f"User: {context['user_after']}\n"
             
-        feedback = f"Error: {ex.get('reason', 'Unknown error')}. Suggestion: {ex.get('suggestion', 'No suggestion')}{preserve_syntax_instruction}"
-        
-        if messages:
-            trajectories.append((messages, feedback))
+        trajectories_text += f"Feedback: Error: {ex.get('reason', 'Unknown error')}. Suggestion: {ex.get('suggestion', 'No suggestion')}\n"
 
-    if not trajectories:
+    if not trajectories_text:
         print(json.dumps({"error": "No valid trajectories found from examples"}))
         sys.exit(1)
 
@@ -67,13 +62,42 @@ def main():
             print(json.dumps({"error": f"Unsupported provider: {provider}"}))
             sys.exit(1)
         
-        # Initialize optimizer
-        optimizer = create_prompt_optimizer(model)
+        # Use custom meta prompt if provided, otherwise fallback to a default
+        if not meta_prompt:
+            meta_prompt = """You are an expert prompt engineer.
+Your task is to optimize a system prompt to address specific failure cases while preserving the original behavior for correct cases.
+
+I will provide:
+1. The Current System Prompt.
+2. A list of "Trajectories" (Conversation History + Feedback).
+
+Each trajectory represents a case where the current prompt failed. The feedback explains the error and provides a suggestion.
+
+Your Goal:
+Rewrite the system prompt to fix the errors described in the feedback.
+
+Guidelines:
+- The new prompt must be clear, concise, and instruction-following.
+- Do NOT remove existing instructions unless they directly conflict with the fix.
+- Integrate the new rules naturally into the prompt structure.
+- If the current prompt uses variable placeholders like ${variable}, you MUST preserve them exactly.
+
+Output ONLY the optimized system prompt text. Do not include explanations or markdown formatting."""
+
+        # Append the preserve syntax instruction if needed
+        if preserve_syntax_instruction:
+            meta_prompt += "\n" + preserve_syntax_instruction
+
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", meta_prompt),
+            ("user", "Current System Prompt:\n{current_prompt}\n\nTrajectories:\n{trajectories}")
+        ])
+
+        chain = prompt_template | model | StrOutputParser()
         
-        # Invoke optimizer
-        optimizer_result = optimizer.invoke({
-            "prompt": current_prompt,
-            "trajectories": trajectories
+        optimizer_result = chain.invoke({
+            "current_prompt": current_prompt,
+            "trajectories": trajectories_text
         })
         
         # Output result

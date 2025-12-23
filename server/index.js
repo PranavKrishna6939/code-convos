@@ -39,7 +39,8 @@ function saveDb() {
 const META_PROMPTS_FILE = path.join(__dirname, 'meta_prompts.json');
 let metaPrompts = {
   bucketing: '',
-  suggestions: ''
+  suggestions: '',
+  optimization: ''
 };
 
 function loadMetaPrompts() {
@@ -67,9 +68,10 @@ app.get('/api/meta-prompts', (req, res) => {
 });
 
 app.post('/api/meta-prompts', (req, res) => {
-  const { bucketing, suggestions } = req.body;
+  const { bucketing, suggestions, optimization } = req.body;
   if (bucketing) metaPrompts.bucketing = bucketing;
   if (suggestions) metaPrompts.suggestions = suggestions;
+  if (optimization) metaPrompts.optimization = optimization;
   saveMetaPrompts();
   res.json({ success: true });
 });
@@ -1106,7 +1108,8 @@ app.post('/api/optimize-judge-prompt', async (req, res) => {
       provider: selectedProvider,
       model: selectedModel,
       temperature: selectedTemperature,
-      api_key: apiKey
+      api_key: apiKey,
+      meta_prompt: metaPrompts.optimization
     };
 
     pythonProcess.stdin.write(JSON.stringify(inputData));
@@ -1343,7 +1346,8 @@ app.post('/api/optimize-global-prompt', async (req, res) => {
       provider: selectedProvider,
       model: selectedModel,
       temperature: selectedTemperature,
-      api_key: apiKey
+      api_key: apiKey,
+      meta_prompt: metaPrompts.optimization
     };
 
     pythonProcess.stdin.write(JSON.stringify(inputData));

@@ -87,7 +87,7 @@ export default function PromptOptimizer() {
 
   // Meta Prompts State
   const [isMetaPromptOpen, setIsMetaPromptOpen] = useState(false);
-  const [metaPrompts, setMetaPrompts] = useState({ bucketing: '', suggestions: '' });
+  const [metaPrompts, setMetaPrompts] = useState({ bucketing: '', suggestions: '', optimization: '' });
 
   const { data: fetchedMetaPrompts } = useQuery({
     queryKey: ['metaPrompts'],
@@ -451,6 +451,18 @@ export default function PromptOptimizer() {
                   <Textarea 
                     value={metaPrompts.suggestions}
                     onChange={(e) => setMetaPrompts(prev => ({ ...prev, suggestions: e.target.value }))}
+                    className="h-64 font-mono text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Prompt Optimization Prompt</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Used when clicking "Fix in Prompt" or "Fix All Issues".
+                  </p>
+                  <Textarea 
+                    value={metaPrompts.optimization}
+                    onChange={(e) => setMetaPrompts(prev => ({ ...prev, optimization: e.target.value }))}
                     className="h-64 font-mono text-sm"
                   />
                 </div>

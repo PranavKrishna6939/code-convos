@@ -168,13 +168,13 @@ export const api = {
     return res.json();
   },
 
-  getMetaPrompts: async (): Promise<{ bucketing: string, suggestions: string }> => {
+  getMetaPrompts: async (): Promise<{ bucketing: string, suggestions: string, optimization: string }> => {
     const res = await fetch(`${API_BASE}/meta-prompts`);
     if (!res.ok) throw new Error('Failed to fetch meta prompts');
     return res.json();
   },
 
-  updateMetaPrompts: async (prompts: { bucketing?: string, suggestions?: string }): Promise<void> => {
+  updateMetaPrompts: async (prompts: { bucketing?: string, suggestions?: string, optimization?: string }): Promise<void> => {
     const res = await fetch(`${API_BASE}/meta-prompts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
