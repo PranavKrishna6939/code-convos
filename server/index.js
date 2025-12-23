@@ -1184,6 +1184,7 @@ app.post('/api/optimize-judge-prompt/all', async (req, res) => {
       if (code !== 0) {
         console.error('[Optimize All] Python script exited with code:', code);
         console.error('[Optimize All] Stderr:', errorData);
+        console.log('[Optimize All] Stdout:', outputData);
         
         let errorMsg = errorData;
         try {

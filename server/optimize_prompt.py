@@ -1,8 +1,15 @@
 import sys
 import json
 import os
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_openai import ChatOpenAI
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError as e:
+    print(json.dumps({"error": f"ImportError: {str(e)}. Please ensure all requirements are installed."}))
+    sys.exit(1)
 
 def main():
     # Read input from stdin

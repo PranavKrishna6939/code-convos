@@ -1,4 +1,5 @@
 langmem
 langgraph
+langchain-core
 langchain-openai
 langchain-google-genai
