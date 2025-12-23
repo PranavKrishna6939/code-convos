@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye, Settings2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye, Settings2, FileCode } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -85,6 +85,35 @@ export default function PromptOptimizer() {
   const [optimizerModel, setOptimizerModel] = useState<string>('gpt-4.1');
   const [optimizerTemperature, setOptimizerTemperature] = useState<number>(0.2);
 
+  // Meta Prompts State
+  const [isMetaPromptOpen, setIsMetaPromptOpen] = useState(false);
+  const [metaPrompts, setMetaPrompts] = useState({ bucketing: '', suggestions: '' });
+
+  const { data: fetchedMetaPrompts } = useQuery({
+    queryKey: ['metaPrompts'],
+    queryFn: api.getMetaPrompts,
+    enabled: isMetaPromptOpen
+  });
+
+  useEffect(() => {
+    if (fetchedMetaPrompts) {
+      setMetaPrompts(fetchedMetaPrompts);
+    }
+  }, [fetchedMetaPrompts]);
+
+  const updateMetaPromptsMutation = useMutation({
+    mutationFn: async () => {
+      return api.updateMetaPrompts(metaPrompts);
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Meta prompts updated successfully." });
+      setIsMetaPromptOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update meta prompts.", variant: "destructive" });
+    }
+  });
+
   const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.getProject(projectId!),
@@ -129,7 +158,13 @@ export default function PromptOptimizer() {
   const optimizeMutation = useMutation({
     mutationFn: async () => {
       if (!selectedJudgeId || !projectId) return;
-      return api.optimizePrompt(projectId, selectedJudgeId);
+      return api.optimizePrompt(
+        projectId, 
+        selectedJudgeId,
+        optimizerProvider,
+        optimizerModel,
+        optimizerTemperature
+      );
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
@@ -175,7 +210,13 @@ export default function PromptOptimizer() {
   const generateSuggestionsMutation = useMutation({
     mutationFn: async () => {
       if (!projectId || selectedSuggestionJudges.length === 0) return;
-      return api.generateGlobalSuggestions(projectId, selectedSuggestionJudges);
+      return api.generateGlobalSuggestions(
+        projectId, 
+        selectedSuggestionJudges,
+        optimizerProvider,
+        optimizerModel,
+        optimizerTemperature
+      );
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
@@ -380,6 +421,47 @@ export default function PromptOptimizer() {
               </div>
             </PopoverContent>
           </Popover>
+
+          <Button variant="outline" size="icon" title="Edit Meta Prompts" onClick={() => setIsMetaPromptOpen(true)}>
+            <FileCode className="h-4 w-4" />
+          </Button>
+
+          <Dialog open={isMetaPromptOpen} onOpenChange={setIsMetaPromptOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Meta Prompts</DialogTitle>
+                <DialogDescription>
+                  Modify the system prompts used for Error Bucketing and Suggestion Generation.
+                  Variables like {'${judge.label_name}'} will be replaced at runtime.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-4">
+                <div className="space-y-2">
+                  <Label>Error Bucketing Prompt</Label>
+                  <Textarea 
+                    value={metaPrompts.bucketing}
+                    onChange={(e) => setMetaPrompts(prev => ({ ...prev, bucketing: e.target.value }))}
+                    className="h-64 font-mono text-sm"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Suggestion Generation Prompt</Label>
+                  <Textarea 
+                    value={metaPrompts.suggestions}
+                    onChange={(e) => setMetaPrompts(prev => ({ ...prev, suggestions: e.target.value }))}
+                    className="h-64 font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsMetaPromptOpen(false)}>Cancel</Button>
+                <Button onClick={() => updateMetaPromptsMutation.mutate()}>Save Changes</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
             <SelectTrigger className="w-[300px]">

@@ -36,7 +36,43 @@ function saveDb() {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
+const META_PROMPTS_FILE = path.join(__dirname, 'meta_prompts.json');
+let metaPrompts = {
+  bucketing: '',
+  suggestions: ''
+};
+
+function loadMetaPrompts() {
+  if (fs.existsSync(META_PROMPTS_FILE)) {
+    try {
+      const data = fs.readFileSync(META_PROMPTS_FILE, 'utf8');
+      metaPrompts = JSON.parse(data);
+    } catch (err) {
+      console.error('Error reading Meta Prompts file:', err);
+    }
+  }
+}
+
+function saveMetaPrompts() {
+  fs.writeFileSync(META_PROMPTS_FILE, JSON.stringify(metaPrompts, null, 2));
+}
+
+loadMetaPrompts();
+
 // --- Routes ---
+
+// Meta Prompts
+app.get('/api/meta-prompts', (req, res) => {
+  res.json(metaPrompts);
+});
+
+app.post('/api/meta-prompts', (req, res) => {
+  const { bucketing, suggestions } = req.body;
+  if (bucketing) metaPrompts.bucketing = bucketing;
+  if (suggestions) metaPrompts.suggestions = suggestions;
+  saveMetaPrompts();
+  res.json({ success: true });
+});
 
 // Projects
 app.get('/api/projects', (req, res) => {
@@ -620,7 +656,7 @@ app.post('/api/projects/:projectId/conversations/:convId/mark-labelled', (req, r
 // Prompt Optimization
 app.post('/api/optimize-prompt', async (req, res) => {
   console.log('Received optimize-prompt request:', req.body);
-  const { projectId, judgeId } = req.body;
+  const { projectId, judgeId, provider, model, temperature } = req.body;
 
   const project = db.projects.find(p => p.id === projectId);
   if (!project) {
@@ -734,27 +770,14 @@ app.post('/api/optimize-prompt', async (req, res) => {
 
     const payload = {
       config: {
-        provider: judge.provider || "openai",
-        model: judge.model || "gpt-4.1-mini",
-        temperature: 0.4
+        provider: provider || judge.provider || "openai",
+        model: model || judge.model || "gpt-4.1-mini",
+        temperature: temperature !== undefined ? parseFloat(temperature) : 0.4
       },
-      prompt: `You are an expert prompt engineer and data analyst.
-Your task is to analyze a set of errors detected by an LLM judge and categorize them into 2-3 distinct "buckets" or categories based on the root cause or type of failure.
-
-Judge Information:
-Name: ${judge.label_name}
-Description: ${judge.description}
-Prompt: ${judge.prompt}
-
-I will provide a list of errors. Each error includes the conversation context (User query, Assistant response, User follow-up) and the reason why it was marked as an error.
-
-For each bucket, you must provide:
-1. Title: A short, descriptive title for the category.
-2. Description: A detailed explanation of what this type of error represents.
-3. Examples: Select 1-2 representative examples from the provided list. For each example, provide:
-    - The original error reason.
-
-Use the provided tool to submit your analysis.`,
+      prompt: metaPrompts.bucketing
+        .replace(/\$\{judge\.label_name\}/g, judge.label_name)
+        .replace(/\$\{judge\.description\}/g, judge.description)
+        .replace(/\$\{judge\.prompt\}/g, judge.prompt),
       messages: [
         {
           role: "user",
@@ -763,10 +786,6 @@ Use the provided tool to submit your analysis.`,
       ],
       tool: tool
     };
-
-    console.log('--- OPTIMIZE PROMPT REQUEST ---');
-    console.log(JSON.stringify(payload, null, 2));
-    console.log('-------------------------------');
 
     const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
       headers: { 'Content-Type': 'application/json' }
@@ -847,7 +866,7 @@ Use the provided tool to submit your analysis.`,
 
 // Generate Global Suggestions
 app.post('/api/generate-global-suggestions', async (req, res) => {
-  const { projectId, judgeIds } = req.body;
+  const { projectId, judgeIds, provider, model, temperature } = req.body;
 
   const project = db.projects.find(p => p.id === projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -903,32 +922,11 @@ Prompt: ${j.prompt}
 
         const payload = {
             config: {
-                provider: "openai",
-                model: "gpt-4o",
-                temperature: 0.4
+                provider: provider || "openai",
+                model: model || "gpt-4o",
+                temperature: temperature || 0.4
             },
-            prompt: `You are an expert prompt engineer and compliance officer.
-Your task is to generate "Corrected Responses" for a set of error examples.
-
-CRITICAL INSTRUCTIONS:
-1. The corrected response must satisfy the rules and guidelines of ALL the following judges simultaneously.
-2. The corrected response must specifically resolve the error described in the "reason" field of the example.
-3. If there is a conflict between judges, prioritize the most restrictive rule, but aim to satisfy both.
-4. The response must be natural and conversational while strictly adhering to the constraints.
-
-Judges Information:
-${judgesInfo}
-
-I will provide a list of error buckets with examples. Each example includes the conversation context and the original error reason.
-
-For each example in the buckets, provide a "suggestion" (Corrected Response).
-The suggestion must:
-- Fix the specific error identified in the example.
-- Strictly adhere to ALL rules from ALL provided judges.
-- Be a complete, valid response that could replace the original assistant response.
-- NOT explain the correction, just provide the corrected response text.
-
-Use the provided tool to submit the updated buckets with suggestions.`,
+            prompt: metaPrompts.suggestions.replace(/\$\{judgesInfo\}/g, judgesInfo),
             messages: [
                 {
                     role: "user",
@@ -937,10 +935,6 @@ Use the provided tool to submit the updated buckets with suggestions.`,
             ],
             tool: tool
         };
-
-        console.log('--- GENERATE GLOBAL SUGGESTIONS REQUEST ---');
-        console.log(JSON.stringify(payload, null, 2));
-        console.log('-------------------------------------------');
 
         try {
             const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {

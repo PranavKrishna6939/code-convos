@@ -158,13 +158,29 @@ export const api = {
     return res.json();
   },
 
-  optimizePrompt: async (projectId: string, judgeId: string): Promise<{ success: boolean, buckets: any[] }> => {
+  optimizePrompt: async (projectId: string, judgeId: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, buckets: any[] }> => {
     const res = await fetch(`${API_BASE}/optimize-prompt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, judgeId }),
+      body: JSON.stringify({ projectId, judgeId, provider, model, temperature }),
     });
     if (!res.ok) throw new Error('Failed to optimize prompt');
+    return res.json();
+  },
+
+  getMetaPrompts: async (): Promise<{ bucketing: string, suggestions: string }> => {
+    const res = await fetch(`${API_BASE}/meta-prompts`);
+    if (!res.ok) throw new Error('Failed to fetch meta prompts');
+    return res.json();
+  },
+
+  updateMetaPrompts: async (prompts: { bucketing?: string, suggestions?: string }): Promise<void> => {
+    const res = await fetch(`${API_BASE}/meta-prompts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prompts),
+    });
+    if (!res.ok) throw new Error('Failed to update meta prompts');
     return res.json();
   },
 
@@ -198,11 +214,11 @@ export const api = {
     return res.json();
   },
 
-  generateGlobalSuggestions: async (projectId: string, judgeIds: string[]): Promise<{ success: boolean }> => {
+  generateGlobalSuggestions: async (projectId: string, judgeIds: string[], provider?: string, model?: string, temperature?: number): Promise<{ success: boolean }> => {
     const res = await fetch(`${API_BASE}/generate-global-suggestions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, judgeIds }),
+      body: JSON.stringify({ projectId, judgeIds, provider, model, temperature }),
     });
     if (!res.ok) throw new Error('Failed to generate global suggestions');
     return res.json();
