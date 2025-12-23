@@ -33,7 +33,7 @@ def main():
     # Check for variable syntax in current prompt
     preserve_syntax_instruction = ""
     if "${" in current_prompt:
-        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${variable} syntax for all variables. Do NOT change them to {variable}."
+        preserve_syntax_instruction = " IMPORTANT: You MUST preserve the ${variable} syntax for all variables. Do NOT change them to {{variable}}."
 
     # Construct trajectories
     trajectories_text = ""
