@@ -160,7 +160,7 @@ app.get('/api/projects/:id', (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { apiKey, name, limit, outcomes } = req.body;
+  const { apiKey, name, limit, outcomes, agent } = req.body;
 
   if (!apiKey || !name || !limit) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -173,6 +173,10 @@ app.post('/api/projects', async (req, res) => {
     if (outcomes && Array.isArray(outcomes) && outcomes.length > 0) {
       const outcomeQuery = outcomes.map(o => `outcome=${encodeURIComponent(o)}`).join('&');
       url += `&${outcomeQuery}`;
+    }
+
+    if (agent) {
+      url += `&agent=${encodeURIComponent(agent)}`;
     }
     
     console.log('API URL:', url);

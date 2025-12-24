@@ -18,6 +18,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
   const [projectName, setProjectName] = useState('');
   const [numConversations, setNumConversations] = useState('10');
   const [outcomes, setOutcomes] = useState('');
+  const [agent, setAgent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -28,7 +29,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
     
     try {
       const outcomeArray = outcomes.split(',').map(s => s.trim()).filter(s => s.length > 0);
-      const newProject = await api.importProject(apiKey, projectName, parseInt(numConversations), outcomeArray);
+      const newProject = await api.importProject(apiKey, projectName, parseInt(numConversations), outcomeArray, agent);
       onImport(newProject);
       
       // Reset form
@@ -36,6 +37,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
       setProjectName('');
       setNumConversations('10');
       setOutcomes('');
+      setAgent('');
       
       toast({
         title: "Success",
@@ -102,6 +104,16 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
               placeholder="e.g., completed, no_answer"
               value={outcomes}
               onChange={(e) => setOutcomes(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="agent">Agent (optional)</Label>
+            <Input
+              id="agent"
+              placeholder="e.g., test"
+              value={agent}
+              onChange={(e) => setAgent(e.target.value)}
             />
           </div>
         </div>

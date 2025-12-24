@@ -16,11 +16,11 @@ export const api = {
     return res.json();
   },
 
-  importProject: async (apiKey: string, name: string, limit: number, outcomes?: string[]): Promise<Project> => {
+  importProject: async (apiKey: string, name: string, limit: number, outcomes?: string[], agent?: string): Promise<Project> => {
     const res = await fetch(`${API_BASE}/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, name, limit, outcomes }),
+      body: JSON.stringify({ apiKey, name, limit, outcomes, agent }),
     });
     if (!res.ok) throw new Error('Failed to import project');
     return res.json();
