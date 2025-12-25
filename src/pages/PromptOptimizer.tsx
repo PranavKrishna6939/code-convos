@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye, Settings2, FileCode } from 'lucide-react';
+import { ArrowLeft, Loader2, Lightbulb, RefreshCw, Wand2, Check, X, Eye, Settings2, FileCode, Plus, Trash2, Pencil } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -35,6 +35,52 @@ import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+
+interface AgentPrompt {
+  id: string;
+  title: string;
+  description: string;
+  content: string;
+}
+
+const PROMPT_SEPARATOR = "\n\n<<<<< PROMPT_SECTION_DELIMITER >>>>>\n\n";
+
+const serializePrompts = (prompts: AgentPrompt[]) => {
+  return prompts.map(p => 
+    `### TITLE: ${p.title}\n### DESCRIPTION: ${p.description}\n${p.content}`
+  ).join(PROMPT_SEPARATOR);
+};
+
+const parsePrompts = (text: string): AgentPrompt[] => {
+  if (!text) return [];
+  // Check if it has our separator or format
+  if (!text.includes('### TITLE:') && !text.includes('<<<<< PROMPT_SECTION_DELIMITER >>>>>')) {
+    // Legacy single prompt
+    return [{
+      id: 'default-master',
+      title: 'Master Prompt',
+      description: 'Main system prompt',
+      content: text
+    }];
+  }
+
+  const sections = text.split(PROMPT_SEPARATOR);
+  return sections.map((section, index) => {
+    const titleMatch = section.match(/### TITLE: (.*)(\n|$)/);
+    const descMatch = section.match(/### DESCRIPTION: (.*)(\n|$)/);
+    
+    let content = section;
+    if (titleMatch) content = content.replace(titleMatch[0], '');
+    if (descMatch) content = content.replace(descMatch[0], '');
+    
+    return {
+      id: `prompt-${index}-${Date.now()}`,
+      title: titleMatch ? titleMatch[1].trim() : `Prompt ${index + 1}`,
+      description: descMatch ? descMatch[1].trim() : '',
+      content: content.trim()
+    };
+  });
+};
 
 const DiffViewer = ({ oldText, newText }: { oldText: string, newText: string }) => {
   const diff = Diff.diffLines(oldText, newText);
@@ -68,6 +114,8 @@ export default function PromptOptimizer() {
   const [originalPrompt, setOriginalPrompt] = useState('');
   const [newPrompt, setNewPrompt] = useState('');
   const [agentPrompt, setAgentPrompt] = useState('');
+  const [agentPrompts, setAgentPrompts] = useState<AgentPrompt[]>([]);
+  const [editingPrompt, setEditingPrompt] = useState<AgentPrompt | null>(null);
   const [activeBucketIndex, setActiveBucketIndex] = useState<number | null>(null);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
   
@@ -124,6 +172,7 @@ export default function PromptOptimizer() {
   useEffect(() => {
     if (project?.agentPrompt) {
       setAgentPrompt(project.agentPrompt);
+      setAgentPrompts(parsePrompts(project.agentPrompt));
     }
   }, [project]);
 
@@ -311,6 +360,7 @@ export default function PromptOptimizer() {
     
     // Update the local agent prompt state with the new version
     setAgentPrompt(newPrompt);
+    setAgentPrompts(parsePrompts(newPrompt));
     
     // Save to project
     updateProjectMutation.mutate({ agentPrompt: newPrompt });
@@ -495,28 +545,120 @@ export default function PromptOptimizer() {
                 Agent Master Prompt
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
               <DialogHeader>
                 <DialogTitle>Voice AI Agent Master Prompt</DialogTitle>
                 <DialogDescription>
-                  Paste the system prompt of the <strong>Voice AI Agent</strong> you want to optimize. 
-                  This is <strong>NOT</strong> the Judge's prompt.
+                  Manage the system prompts for the Voice AI Agent. You can define multiple prompt sections.
                 </DialogDescription>
               </DialogHeader>
+              
               <div className="flex-1 overflow-hidden py-4">
-                <Textarea 
-                  className="h-full font-mono text-sm" 
-                  placeholder="Paste your Voice AI Agent's system prompt here..."
-                  value={agentPrompt}
-                  onChange={(e) => setAgentPrompt(e.target.value)}
-                />
+                {editingPrompt ? (
+                  <div className="flex flex-col h-full gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Prompt Title</Label>
+                        <Input 
+                          value={editingPrompt.title}
+                          onChange={(e) => setEditingPrompt({...editingPrompt, title: e.target.value})}
+                          placeholder="e.g. Role Definition"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Input 
+                          value={editingPrompt.description}
+                          onChange={(e) => setEditingPrompt({...editingPrompt, description: e.target.value})}
+                          placeholder="e.g. Defines the persona"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-2 flex flex-col">
+                      <Label>Prompt Content</Label>
+                      <Textarea 
+                        className="flex-1 font-mono text-sm resize-none" 
+                        value={editingPrompt.content}
+                        onChange={(e) => setEditingPrompt({...editingPrompt, content: e.target.value})}
+                        placeholder="Enter the prompt content here..."
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setEditingPrompt(null)}>Cancel</Button>
+                      <Button onClick={() => {
+                        if (agentPrompts.find(p => p.id === editingPrompt.id)) {
+                          setAgentPrompts(agentPrompts.map(p => p.id === editingPrompt.id ? editingPrompt : p));
+                        } else {
+                          setAgentPrompts([...agentPrompts, editingPrompt]);
+                        }
+                        setEditingPrompt(null);
+                      }}>Save Prompt</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-sm font-medium text-muted-foreground">Defined Prompts ({agentPrompts.length})</h3>
+                      <Button size="sm" onClick={() => setEditingPrompt({
+                        id: `new-${Date.now()}`,
+                        title: '',
+                        description: '',
+                        content: ''
+                      })}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Prompt
+                      </Button>
+                    </div>
+                    
+                    <ScrollArea className="flex-1 pr-4">
+                      <div className="space-y-3">
+                        {agentPrompts.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                            No prompts defined. Click "Add Prompt" to start.
+                          </div>
+                        )}
+                        {agentPrompts.map((prompt) => (
+                          <Card key={prompt.id} className="relative group">
+                            <CardHeader className="py-3 px-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <CardTitle className="text-base">{prompt.title || 'Untitled Prompt'}</CardTitle>
+                                  <p className="text-xs text-muted-foreground mt-1">{prompt.description}</p>
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingPrompt(prompt)}>
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => {
+                                    setAgentPrompts(agentPrompts.filter(p => p.id !== prompt.id));
+                                  }}>
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="py-3 px-4 bg-muted/20">
+                              <p className="text-xs font-mono text-muted-foreground line-clamp-3">
+                                {prompt.content}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
               </div>
-              <DialogFooter>
-                <Button onClick={() => {
-                  updateProjectMutation.mutate({ agentPrompt });
-                  setIsMasterPromptOpen(false);
-                }}>Save & Close</Button>
-              </DialogFooter>
+              {!editingPrompt && (
+                <DialogFooter>
+                  <Button onClick={() => {
+                    const serialized = serializePrompts(agentPrompts);
+                    setAgentPrompt(serialized);
+                    updateProjectMutation.mutate({ agentPrompt: serialized });
+                    setIsMasterPromptOpen(false);
+                  }}>Save All & Close</Button>
+                </DialogFooter>
+              )}
             </DialogContent>
           </Dialog>
 

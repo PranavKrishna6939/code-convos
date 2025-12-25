@@ -101,6 +101,7 @@ Guidelines:
 - Do NOT remove existing instructions unless they directly conflict with the fix.
 - Integrate the new rules naturally into the prompt structure.
 - If the current prompt uses variable placeholders like \${variable}, you MUST preserve them exactly.
+- IMPORTANT: The system prompt may contain multiple sections separated by headers (e.g. ### TITLE: ...). You must PRESERVE these headers and the overall structure. Only modify the content within the sections to address the errors.
 
 Output ONLY the optimized system prompt text. Do not include explanations or markdown formatting.`
 };
