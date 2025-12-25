@@ -610,7 +610,7 @@ export default function PromptOptimizer() {
                       </Button>
                     </div>
                     
-                    <ScrollArea className="flex-1 pr-4">
+                    <div className="flex-1 overflow-y-auto pr-4 min-h-0">
                       <div className="space-y-3">
                         {agentPrompts.length === 0 && (
                           <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
@@ -637,19 +637,15 @@ export default function PromptOptimizer() {
                                 </div>
                               </div>
                             </CardHeader>
-                            <CardContent className="p-0 bg-muted/20">
-                              <ScrollArea className="h-32 w-full">
-                                <div className="p-4">
-                                  <p className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
-                                    {prompt.content}
-                                  </p>
-                                </div>
-                              </ScrollArea>
+                            <CardContent className="py-3 px-4 bg-muted/20">
+                              <p className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                                {prompt.content}
+                              </p>
                             </CardContent>
                           </Card>
                         ))}
                       </div>
-                    </ScrollArea>
+                    </div>
                   </div>
                 )}
               </div>
