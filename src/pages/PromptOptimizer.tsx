@@ -637,10 +637,14 @@ export default function PromptOptimizer() {
                                 </div>
                               </div>
                             </CardHeader>
-                            <CardContent className="py-3 px-4 bg-muted/20">
-                              <p className="text-xs font-mono text-muted-foreground line-clamp-3">
-                                {prompt.content}
-                              </p>
+                            <CardContent className="p-0 bg-muted/20">
+                              <ScrollArea className="h-32 w-full">
+                                <div className="p-4">
+                                  <p className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                                    {prompt.content}
+                                  </p>
+                                </div>
+                              </ScrollArea>
                             </CardContent>
                           </Card>
                         ))}
