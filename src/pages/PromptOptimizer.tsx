@@ -545,7 +545,7 @@ export default function PromptOptimizer() {
                 Agent Master Prompt
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Voice AI Agent Master Prompt</DialogTitle>
                 <DialogDescription>
@@ -553,9 +553,9 @@ export default function PromptOptimizer() {
                 </DialogDescription>
               </DialogHeader>
               
-              <div className="flex-1 overflow-hidden py-4">
+              <div className="py-4">
                 {editingPrompt ? (
-                  <div className="flex flex-col h-full gap-4">
+                  <div className="flex flex-col gap-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Prompt Title</Label>
@@ -574,10 +574,10 @@ export default function PromptOptimizer() {
                         />
                       </div>
                     </div>
-                    <div className="flex-1 space-y-2 flex flex-col">
+                    <div className="space-y-2 flex flex-col">
                       <Label>Prompt Content</Label>
                       <Textarea 
-                        className="flex-1 font-mono text-sm resize-none" 
+                        className="min-h-[300px] font-mono text-sm" 
                         value={editingPrompt.content}
                         onChange={(e) => setEditingPrompt({...editingPrompt, content: e.target.value})}
                         placeholder="Enter the prompt content here..."
@@ -596,7 +596,7 @@ export default function PromptOptimizer() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col h-full">
+                  <div className="flex flex-col">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-sm font-medium text-muted-foreground">Defined Prompts ({agentPrompts.length})</h3>
                       <Button size="sm" onClick={() => setEditingPrompt({
@@ -610,8 +610,7 @@ export default function PromptOptimizer() {
                       </Button>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto pr-4 min-h-0">
-                      <div className="space-y-3">
+                    <div className="space-y-3">
                         {agentPrompts.length === 0 && (
                           <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                             No prompts defined. Click "Add Prompt" to start.
@@ -638,13 +637,12 @@ export default function PromptOptimizer() {
                               </div>
                             </CardHeader>
                             <CardContent className="py-3 px-4 bg-muted/20">
-                              <p className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                              <p className="text-xs font-mono text-muted-foreground line-clamp-3">
                                 {prompt.content}
                               </p>
                             </CardContent>
                           </Card>
                         ))}
-                      </div>
                     </div>
                   </div>
                 )}
