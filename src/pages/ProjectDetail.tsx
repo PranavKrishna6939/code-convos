@@ -621,14 +621,20 @@ const ProjectDetail = () => {
                 </Badge>
               </div>
 
-              {(selectedConversation.results && Object.keys(selectedConversation.results).length > 0) || (selectedConversation.raw_data?.results && Object.keys(selectedConversation.raw_data.results).length > 0) ? (
+              {(() => {
+                const resultsData = selectedConversation.results && Object.keys(selectedConversation.results).length > 0 
+                  ? selectedConversation.results 
+                  : selectedConversation.raw_data?.analysis?.results || selectedConversation.raw_data?.results || {};
+                const hasResults = Object.keys(resultsData).length > 0;
+
+                return hasResults ? (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Results Parameters</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(selectedConversation.results || selectedConversation.raw_data?.results || {}).map(([key, value]) => (
+                      {Object.entries(resultsData).map(([key, value]) => (
                         <div key={key} className="p-3 rounded-md border bg-muted/20">
                           <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                             {key.replace(/([A-Z])/g, ' $1').trim()}
@@ -649,11 +655,12 @@ const ProjectDetail = () => {
                     </div>
                   </CardContent>
                 </Card>
-              ) : (
-                <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
-                  No analysis results available for this conversation.
-                </div>
-              )}
+                ) : (
+                  <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
+                    No analysis results available for this conversation.
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

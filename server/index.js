@@ -308,7 +308,7 @@ app.post('/api/projects', async (req, res) => {
         id: c.id || `conv-${Date.now()}-${idx}`,
         messages: messages,
         outcome: c.outcome || (c.callInfo && c.callInfo.endReason) || 'unknown',
-        results: c.results || {},
+        results: c.results || c.analysis?.results || {},
         turn_errors: {}, // Initialize empty errors
         raw_data: c
       };
