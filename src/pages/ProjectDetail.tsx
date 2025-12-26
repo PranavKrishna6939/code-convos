@@ -385,6 +385,7 @@ const ProjectDetail = () => {
         <div className="px-4 border-b border-border bg-muted/10">
           <TabsList>
             <TabsTrigger value="conversations">Conversations</TabsTrigger>
+            <TabsTrigger value="analysis">Analysis</TabsTrigger>
             <TabsTrigger value="tools">Tools</TabsTrigger>
           </TabsList>
         </div>
@@ -605,6 +606,60 @@ const ProjectDetail = () => {
             </div>
           )}
         </div>
+        </TabsContent>
+
+        <TabsContent value="analysis" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
+          {selectedConversation ? (
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Conversation Analysis</h2>
+                  <p className="text-sm text-muted-foreground font-mono">{selectedConversation.id}</p>
+                </div>
+                <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
+                  {selectedConversation.outcome}
+                </Badge>
+              </div>
+
+              {selectedConversation.results ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Results Parameters</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(selectedConversation.results).map(([key, value]) => (
+                        <div key={key} className="p-3 rounded-md border bg-muted/20">
+                          <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
+                            {key.replace(/([A-Z])/g, ' $1').trim()}
+                          </div>
+                          <div className="text-sm font-mono break-words">
+                            {typeof value === 'boolean' ? (
+                              <Badge variant={value ? 'outline' : 'destructive'} className="text-xs">
+                                {value.toString()}
+                              </Badge>
+                            ) : typeof value === 'object' ? (
+                              <pre className="text-xs overflow-x-auto">{JSON.stringify(value, null, 2)}</pre>
+                            ) : (
+                              String(value)
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
+                  No analysis results available for this conversation.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <p>Please select a conversation from the Conversations tab first.</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="tools" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
