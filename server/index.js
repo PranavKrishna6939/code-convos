@@ -160,6 +160,27 @@ app.get('/api/projects/:id', (req, res) => {
   res.json(project);
 });
 
+app.get('/api/projects/:id/tools', async (req, res) => {
+  const project = db.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  if (!project.api_key) {
+    return res.status(400).json({ error: 'Project does not have an API key' });
+  }
+
+  try {
+    const response = await axios.get('https://api.hoomanlabs.com/routes/v1/tools/', {
+      headers: {
+        'Authorization': project.api_key
+      }
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error fetching tools:', error.message);
+    res.status(500).json({ error: 'Failed to fetch tools', details: error.message });
+  }
+});
+
 app.post('/api/projects', async (req, res) => {
   const { apiKey, name, limit, outcomes, agent } = req.body;
 

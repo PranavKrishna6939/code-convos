@@ -10,6 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsDialog } from '@/components/AnalyticsDialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
@@ -20,6 +23,12 @@ const ProjectDetail = () => {
   const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.getProject(projectId!),
+    enabled: !!projectId
+  });
+
+  const { data: tools } = useQuery({
+    queryKey: ['tools', projectId],
+    queryFn: () => api.getProjectTools(projectId!),
     enabled: !!projectId
   });
 
@@ -371,8 +380,16 @@ const ProjectDetail = () => {
         </div>
       </div>
 
-      {/* Three-column layout */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Tabs Layout */}
+      <Tabs defaultValue="conversations" className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-4 border-b border-border bg-muted/10">
+          <TabsList>
+            <TabsTrigger value="conversations">Conversations</TabsTrigger>
+            <TabsTrigger value="tools">Tools</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="conversations" className="flex-1 flex overflow-hidden mt-0 data-[state=inactive]:hidden">
         {/* Left: Conversation List */}
         <div className="w-48 border-r border-border overflow-y-auto">
           {filteredConversations.map((conv) => {
@@ -588,7 +605,51 @@ const ProjectDetail = () => {
             </div>
           )}
         </div>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="tools" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
+            {tools?.data?.map((tool: any) => (
+              <Card key={tool.id} className="flex flex-col h-full">
+                <CardHeader>
+                  <div className="flex justify-between items-start gap-2">
+                    <CardTitle className="text-base font-mono break-all">{tool.data?.function?.name || tool.id}</CardTitle>
+                    <Badge variant="outline" className="shrink-0">{tool.category}</Badge>
+                  </div>
+                  <CardDescription className="line-clamp-2 text-xs">
+                    {tool.data?.function?.description || "No description"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col gap-4">
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Agent:</span>
+                      <span className="font-medium truncate max-w-[150px]" title={tool.agent}>{tool.agent || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Company:</span>
+                      <span className="font-medium">{tool.company}</span>
+                    </div>
+                  </div>
+                  {tool.data?.function?.parameters && (
+                     <div className="mt-auto pt-2">
+                       <p className="text-xs font-medium mb-1 text-muted-foreground">Parameters</p>
+                       <div className="p-2 bg-muted/50 rounded text-[10px] font-mono overflow-x-auto max-h-[200px]">
+                         <pre>{JSON.stringify(tool.data.function.parameters, null, 2)}</pre>
+                       </div>
+                     </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+            {!tools?.data?.length && (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No tools found for this project.
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Analytics Dialog */}
       <AnalyticsDialog 
