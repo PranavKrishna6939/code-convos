@@ -117,6 +117,8 @@ const ProjectTools = () => {
     if (Array.isArray(data)) return data;
     // If data has tools property
     if (data.tools && Array.isArray(data.tools)) return data.tools;
+    // If data has data property (common in some APIs)
+    if (data.data && Array.isArray(data.data)) return data.data;
     return [];
   };
 
@@ -174,7 +176,19 @@ const ProjectTools = () => {
 
       {!isToolsLoading && filteredTools.length === 0 && agentName && (
         <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
-          No relevant tools (info_extraction, call_outcome) found for this agent.
+          <p>No relevant tools (info_extraction, call_outcome) found for this agent.</p>
+          {toolsData && (
+             <div className="mt-4 text-xs text-left bg-muted p-4 rounded overflow-auto max-h-64 max-w-2xl mx-auto">
+               <p className="font-bold mb-2">Debug Info (Raw Response Structure):</p>
+               <pre>{JSON.stringify(Array.isArray(toolsData) ? 'Array[' + toolsData.length + ']' : Object.keys(toolsData), null, 2)}</pre>
+               {!Array.isArray(toolsData) && toolsData.data && (
+                 <>
+                   <p className="font-bold mt-2 mb-1">toolsData.data type:</p>
+                   <pre>{Array.isArray(toolsData.data) ? 'Array[' + toolsData.data.length + ']' : typeof toolsData.data}</pre>
+                 </>
+               )}
+             </div>
+          )}
         </div>
       )}
 
