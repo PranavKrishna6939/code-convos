@@ -17,8 +17,15 @@ interface ToolProperty {
 }
 
 interface ToolSchema {
-  name: string;
-  description: string;
+  name?: string;
+  description?: string;
+  data?: {
+    function?: {
+      name?: string;
+      description?: string;
+      parameters?: any;
+    }
+  };
   parameters?: {
     type: string;
     properties: Record<string, ToolProperty>;
@@ -114,7 +121,10 @@ const ProjectTools = () => {
   };
 
   const allTools = getToolList(toolsData);
-  const filteredTools = allTools.filter(t => relevantTools.includes(t.name));
+  const filteredTools = allTools.filter(t => {
+    const name = t.name || t.data?.function?.name;
+    return name && relevantTools.includes(name);
+  });
 
   if (isProjectLoading) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin" /></div>;
@@ -170,18 +180,23 @@ const ProjectTools = () => {
 
       <div className="grid gap-6">
         {filteredTools.map((tool) => {
+          const toolName = tool.name || tool.data?.function?.name;
+          if (!toolName) return null;
+
           // Handle different schema structures (some APIs return parameters inside, some at root)
-          const properties = tool.parameters?.properties || tool.properties || {};
-          const required = tool.parameters?.required || tool.required || [];
+          const description = tool.description || tool.data?.function?.description;
+          const parameters = tool.parameters || tool.data?.function?.parameters || {};
+          const properties = parameters.properties || tool.properties || {};
+          const required = parameters.required || tool.required || [];
 
           return (
-            <Card key={tool.name} className="overflow-hidden">
+            <Card key={toolName} className="overflow-hidden">
               <CardHeader className="bg-muted/30 border-b">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="font-mono text-lg">{tool.name}</CardTitle>
+                  <CardTitle className="font-mono text-lg">{toolName}</CardTitle>
                   <Badge variant="outline">Tool</Badge>
                 </div>
-                <CardDescription>{tool.description}</CardDescription>
+                <CardDescription>{description}</CardDescription>
               </CardHeader>
               <CardContent className="p-6 space-y-6">
                 
@@ -189,7 +204,7 @@ const ProjectTools = () => {
                 <div>
                   <h3 className="text-sm font-medium mb-3">Parameters</h3>
                   <div className="border rounded-md divide-y">
-                    {Object.entries(properties).map(([key, prop]) => (
+                    {Object.entries(properties).map(([key, prop]: [string, any]) => (
                       <div key={key} className="p-3 text-sm grid grid-cols-[1fr_2fr] gap-4">
                         <div>
                           <div className="font-mono font-semibold flex items-center gap-2">
@@ -202,7 +217,7 @@ const ProjectTools = () => {
                           <p className="text-muted-foreground">{prop.description}</p>
                           {prop.enum && (
                             <div className="flex flex-wrap gap-1 mt-2">
-                              {prop.enum.map(e => (
+                              {prop.enum.map((e: string) => (
                                 <Badge key={e} variant="secondary" className="text-xs font-mono">
                                   {e}
                                 </Badge>
@@ -221,7 +236,7 @@ const ProjectTools = () => {
                     <h3 className="text-sm font-medium">Tool Prompt</h3>
                     <Button 
                       size="sm" 
-                      onClick={() => handleSavePrompt(tool.name)}
+                      onClick={() => handleSavePrompt(toolName)}
                       disabled={updateProjectMutation.isPending}
                     >
                       {updateProjectMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
@@ -229,10 +244,10 @@ const ProjectTools = () => {
                     </Button>
                   </div>
                   <Textarea 
-                    placeholder={`Enter prompt for ${tool.name}...`}
+                    placeholder={`Enter prompt for ${toolName}...`}
                     className="font-mono text-sm min-h-[150px]"
-                    value={toolPrompts[tool.name] || ''}
-                    onChange={(e) => handlePromptChange(tool.name, e.target.value)}
+                    value={toolPrompts[toolName] || ''}
+                    onChange={(e) => handlePromptChange(toolName, e.target.value)}
                   />
                 </div>
 
