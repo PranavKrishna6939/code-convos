@@ -74,4 +74,6 @@ export interface Project {
   conversationCount?: number;
   optimizations?: Record<string, OptimizationResult>; // judgeId -> result
   agentPrompt?: string;
+  agent?: string;
+  tool_prompts?: Record<string, string>;
 }

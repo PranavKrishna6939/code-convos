@@ -16,8 +16,12 @@ export const api = {
     return res.json();
   },
 
-  getProjectTools: async (id: string): Promise<any> => {
-    const res = await fetch(`${API_BASE}/projects/${id}/tools`);
+  getProjectTools: async (id: string, agent?: string): Promise<any> => {
+    let url = `${API_BASE}/projects/${id}/tools`;
+    if (agent) {
+      url += `?agent=${encodeURIComponent(agent)}`;
+    }
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Failed to fetch project tools');
     return res.json();
   },

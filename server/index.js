@@ -168,8 +168,16 @@ app.get('/api/projects/:id/tools', async (req, res) => {
     return res.status(400).json({ error: 'Project does not have an API key' });
   }
 
+  const { agent } = req.query;
+  const agentToUse = agent || project.agent;
+
   try {
-    const response = await axios.get('https://api.hoomanlabs.com/routes/v1/tools/', {
+    let url = 'https://api.hoomanlabs.com/routes/v1/tools/';
+    if (agentToUse) {
+      url += `?agent=${encodeURIComponent(agentToUse)}`;
+    }
+
+    const response = await axios.get(url, {
       headers: {
         'Authorization': project.api_key
       }
@@ -179,6 +187,19 @@ app.get('/api/projects/:id/tools', async (req, res) => {
     console.error('Error fetching tools:', error.message);
     res.status(500).json({ error: 'Failed to fetch tools', details: error.message });
   }
+});
+
+app.put('/api/projects/:id', (req, res) => {
+  const idx = db.projects.findIndex(p => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Project not found' });
+
+  const { agent, tool_prompts } = req.body;
+  
+  if (agent !== undefined) db.projects[idx].agent = agent;
+  if (tool_prompts !== undefined) db.projects[idx].tool_prompts = tool_prompts;
+
+  saveDb();
+  res.json(db.projects[idx]);
 });
 
 app.post('/api/projects', async (req, res) => {
@@ -318,6 +339,8 @@ app.post('/api/projects', async (req, res) => {
       id: Date.now().toString(),
       name,
       api_key: apiKey, // Storing API key might be needed for future calls?
+      agent: agent || null,
+      tool_prompts: {},
       conversations
     };
 

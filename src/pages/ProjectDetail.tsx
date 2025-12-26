@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3, Sparkles } from 'lucide-react';
+import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3, Sparkles, Wrench } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -324,6 +324,14 @@ const ProjectDetail = () => {
                 <Sparkles className="w-3 h-3 mr-1" />
                 Prompt Optimizer
               </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => navigate(`/project/${projectId}/tools`)}
+              >
+                <Wrench className="w-3 h-3 mr-1" />
+                Tools
+              </Button>
               <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
                 <SelectTrigger className="w-32 h-8 text-sm">
                   <SelectValue placeholder="Filter Outcome" />
@@ -380,22 +388,13 @@ const ProjectDetail = () => {
         </div>
       </div>
 
-      {/* Tabs Layout */}
-      <Tabs defaultValue="conversations" className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 border-b border-border bg-muted/10">
-          <TabsList>
-            <TabsTrigger value="conversations">Conversations</TabsTrigger>
-            <TabsTrigger value="analysis">Analysis</TabsTrigger>
-            <TabsTrigger value="tools">Tools</TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="conversations" className="flex-1 flex overflow-hidden mt-0 data-[state=inactive]:hidden">
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
         {/* Left: Conversation List */}
-        <div className="w-48 border-r border-border overflow-y-auto">
-          {filteredConversations.map((conv) => {
+        <div className="w-64 border-r border-border overflow-y-auto bg-muted/10 shrink-0">
+          {filteredConversations.map(conv => {
+            const isSelected = conv.id === selectedConvId;
             const hasErrors = conv.turn_errors && Object.keys(conv.turn_errors).length > 0;
-            const isSelected = selectedConvId === conv.id;
             const isManuallyLabelled = conv.manually_labelled;
             
             return (
@@ -437,281 +436,251 @@ const ProjectDetail = () => {
           })}
         </div>
 
-        {/* Center: Conversation View */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {selectedConversation ? (
-            <div className="space-y-3 max-w-2xl">
-              {selectedConversation.messages.map((msg, idx) => {
-                const turnIndex = getAssistantTurnIndex(idx);
-                const hasErrors = turnIndex >= 0 && selectedConversation.turn_errors && Object.keys(selectedConversation.turn_errors).includes(turnIndex.toString());
-                const errors = turnIndex >= 0 ? getErrorsForTurn(turnIndex) : [];
-                const isSelected = selectedTurnIndex === turnIndex && turnIndex >= 0;
-
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => {
-                      if (msg.role === 'assistant') {
-                        setSelectedTurnIndex(turnIndex);
-                      }
-                    }}
-                    className={cn(
-                      "p-3 rounded border",
-                      msg.role === 'user' 
-                        ? "bg-muted/30 border-border ml-0 mr-12" 
-                        : hasErrors
-                          ? "bg-destructive/10 border-destructive/30 ml-12 mr-0 cursor-pointer"
-                          : "bg-card border-border ml-12 mr-0 cursor-pointer",
-                      isSelected && "ring-2 ring-primary"
-                    )}
-                  >
-                    <div className="text-xs text-muted-foreground mb-1 font-mono">
-                      {msg.role === 'assistant' ? `assistant [turn ${turnIndex}]` : 'user'}
-                    </div>
-                    <p className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</p>
-                    
-                    {/* Error chips */}
-                    {errors.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {errors.map((err, errIdx) => (
-                          <span 
-                            key={errIdx}
-                            className="px-2 py-0.5 text-xs font-mono bg-destructive/20 text-destructive rounded"
-                          >
-                            {err.label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+        {/* Right: Tabs for Transcript / Analysis */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Tabs defaultValue="transcript" className="flex-1 flex flex-col overflow-hidden">
+            <div className="border-b px-4 bg-background">
+              <TabsList className="h-10">
+                <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                <TabsTrigger value="analysis">Analysis</TabsTrigger>
+              </TabsList>
             </div>
-          ) : (
-            <div className="text-center text-muted-foreground py-12">
-              Select a conversation
-            </div>
-          )}
-        </div>
 
-        {/* Right: Error & Judge Panel */}
-        <div className="w-80 border-l border-border flex flex-col bg-background">
-          {selectedTurnIndex !== null ? (
-            <>
-              {isManualMode ? (
-                /* Manual Labeling Mode */
-                <div className="flex-1 overflow-y-auto p-4">
-                  <h3 className="text-sm font-medium text-foreground mb-2">
-                    Manual Labels - Turn {selectedTurnIndex}
-                  </h3>
-                  <div className="text-xs text-muted-foreground mb-4">
-                    Click labels to toggle for this assistant turn
-                  </div>
-                  <div className="space-y-2">
-                    {judges.map(judge => {
-                      const manualLabels = selectedConversation?.manual_labels?.[selectedTurnIndex] || [];
-                      const isAssigned = manualLabels.includes(judge.label_name);
-                      
+            <TabsContent value="transcript" className="flex-1 flex overflow-hidden mt-0 data-[state=inactive]:hidden">
+              {/* Center: Conversation View */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {selectedConversation ? (
+                  <div className="space-y-3 max-w-2xl">
+                    {selectedConversation.messages.map((msg, idx) => {
+                      const turnIndex = getAssistantTurnIndex(idx);
+                      const hasErrors = turnIndex >= 0 && selectedConversation.turn_errors && Object.keys(selectedConversation.turn_errors).includes(turnIndex.toString());
+                      const errors = turnIndex >= 0 ? getErrorsForTurn(turnIndex) : [];
+                      const isSelected = selectedTurnIndex === turnIndex && turnIndex >= 0;
+
                       return (
-                        <div 
-                          key={judge.id}
-                          onClick={() => handleToggleManualLabel(selectedTurnIndex, judge.label_name)}
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (msg.role === 'assistant') {
+                              setSelectedTurnIndex(turnIndex);
+                            }
+                          }}
                           className={cn(
-                            "p-2 rounded border text-sm cursor-pointer transition-colors",
-                            isAssigned 
-                              ? "bg-primary text-primary-foreground border-primary" 
-                              : "bg-muted/30 border-border hover:bg-muted/50"
+                            "p-3 rounded border",
+                            msg.role === 'user' 
+                              ? "bg-muted/30 border-border ml-0 mr-12" 
+                              : hasErrors
+                                ? "bg-destructive/10 border-destructive/30 ml-12 mr-0 cursor-pointer"
+                                : "bg-card border-border ml-12 mr-0 cursor-pointer",
+                            isSelected && "ring-2 ring-primary"
                           )}
                         >
-                          <div className="font-mono">{judge.label_name}</div>
-                          <div className={cn(
-                            "text-xs mt-1",
-                            isAssigned ? "text-primary-foreground/80" : "text-muted-foreground"
-                          )}>{judge.description}</div>
+                          <div className="text-xs text-muted-foreground mb-1 font-mono">
+                            {msg.role === 'assistant' ? `assistant [turn ${turnIndex}]` : 'user'}
+                          </div>
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</p>
+                          
+                          {/* Error chips */}
+                          {errors.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {errors.map((err, errIdx) => (
+                                <span 
+                                  key={errIdx}
+                                  className="px-2 py-0.5 text-xs font-mono bg-destructive/20 text-destructive rounded"
+                                >
+                                  {err.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                </div>
-              ) : (
-                /* Normal LLM Judge Mode */
-                <>
-                  {/* Top: Open Codes (Flexible, takes remaining space) */}
-                  <div className="flex-1 overflow-y-auto p-4 min-h-0">
-                    <h3 className="text-sm font-medium text-foreground mb-2">Open Codes</h3>
-                    {currentTurnErrors.length > 0 ? (
-                      <div className="space-y-3 h-full flex flex-col">
-                        {currentTurnErrors.map((error, idx) => (
-                          <div key={`${selectedTurnIndex}-${error.label}`} className="space-y-1 flex-1 flex flex-col">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => handleDeleteLabel(selectedTurnIndex, error.label)}
+                ) : (
+                  <div className="text-center text-muted-foreground py-12">
+                    Select a conversation
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Error & Judge Panel */}
+              <div className="w-80 border-l border-border flex flex-col bg-background shrink-0">
+                {selectedTurnIndex !== null ? (
+                  <>
+                    {isManualMode ? (
+                      /* Manual Labeling Mode */
+                      <div className="flex-1 overflow-y-auto p-4">
+                        <h3 className="text-sm font-medium text-foreground mb-2">
+                          Manual Labels - Turn {selectedTurnIndex}
+                        </h3>
+                        <div className="text-xs text-muted-foreground mb-4">
+                          Click labels to toggle for this assistant turn
+                        </div>
+                        <div className="space-y-2">
+                          {judges.map(judge => {
+                            const manualLabels = selectedConversation?.manual_labels?.[selectedTurnIndex] || [];
+                            const isAssigned = manualLabels.includes(judge.label_name);
+                            
+                            return (
+                              <div 
+                                key={judge.id}
+                                onClick={() => handleToggleManualLabel(selectedTurnIndex, judge.label_name)}
+                                className={cn(
+                                  "p-2 rounded border text-sm cursor-pointer transition-colors",
+                                  isAssigned 
+                                    ? "bg-primary text-primary-foreground border-primary" 
+                                    : "bg-muted/30 border-border hover:bg-muted/50"
+                                )}
                               >
-                                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                              </Button>
-                            </div>
-                            <Textarea
-                              defaultValue={error.edited_reason ?? error.original_reason}
-                              onBlur={(e) => handleUpdateReason(selectedTurnIndex, error.label, e.target.value)}
-                              className="text-sm font-mono flex-1 min-h-[150px] resize-none"
-                            />
-                          </div>
-                        ))}
+                                <div className="font-mono">{judge.label_name}</div>
+                                <div className={cn(
+                                  "text-xs mt-1",
+                                  isAssigned ? "text-primary-foreground/80" : "text-muted-foreground"
+                                )}>{judge.description}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No errors flagged for this turn</p>
-                    )}
-                  </div>
-
-                  {/* Bottom: Axial Codes (Fixed height, pinned to bottom) */}
-                  <div className="h-[400px] border-t border-border p-4 overflow-y-auto bg-muted/5">
-                    <h3 className="text-sm font-medium text-foreground mb-2">Axial Codes (Labels)</h3>
-                    <div className="space-y-2">
-                      {judges.map(judge => {
-                        const isAssigned = currentTurnErrors.some(e => e.label === judge.label_name);
-                        return (
-                          <div 
-                            key={judge.id}
-                            className={cn(
-                              "p-2 rounded border text-sm",
-                              isAssigned 
-                                ? "bg-destructive/10 border-destructive/30" 
-                                : "bg-muted/30 border-border"
-                            )}
-                          >
-                            <div className="font-mono text-foreground">{judge.label_name}</div>
-                            <div className="text-xs text-muted-foreground">{judge.description}</div>
-                            <div className="text-xs mt-1">
-                              {isAssigned ? (
-                                <span className="text-destructive">Assigned</span>
-                              ) : (
-                                <span className="text-muted-foreground">Not Assigned</span>
-                              )}
+                      /* Normal LLM Judge Mode */
+                      <>
+                        {/* Top: Open Codes (Flexible, takes remaining space) */}
+                        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+                          <h3 className="text-sm font-medium text-foreground mb-2">Open Codes</h3>
+                          {currentTurnErrors.length > 0 ? (
+                            <div className="space-y-3 h-full flex flex-col">
+                              {currentTurnErrors.map((error, idx) => (
+                                <div key={`${selectedTurnIndex}-${error.label}`} className="space-y-1 flex-1 flex flex-col">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-mono text-muted-foreground">{error.label}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => handleDeleteLabel(selectedTurnIndex, error.label)}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                                    </Button>
+                                  </div>
+                                  <Textarea
+                                    defaultValue={error.edited_reason ?? error.original_reason}
+                                    onBlur={(e) => handleUpdateReason(selectedTurnIndex, error.label, e.target.value)}
+                                    className="text-sm font-mono flex-1 min-h-[150px] resize-none"
+                                  />
+                                </div>
+                              ))}
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-sm">
-              Click an assistant turn to view details
-            </div>
-          )}
-        </div>
-        </TabsContent>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No errors flagged for this turn</p>
+                          )}
+                        </div>
 
-        <TabsContent value="analysis" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
-          {selectedConversation ? (
-            <div className="max-w-4xl mx-auto space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Conversation Analysis</h2>
-                  <p className="text-sm text-muted-foreground font-mono">{selectedConversation.id}</p>
-                </div>
-                <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
-                  {selectedConversation.outcome}
-                </Badge>
-              </div>
-
-              {(() => {
-                const resultsData = selectedConversation.results && Object.keys(selectedConversation.results).length > 0 
-                  ? selectedConversation.results 
-                  : selectedConversation.raw_data?.analysis?.results || selectedConversation.raw_data?.results || {};
-                const hasResults = Object.keys(resultsData).length > 0;
-
-                return hasResults ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Results Parameters</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(resultsData).map(([key, value]) => (
-                        <div key={key} className="p-3 rounded-md border bg-muted/20">
-                          <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
-                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                          </div>
-                          <div className="text-sm font-mono break-words">
-                            {typeof value === 'boolean' ? (
-                              <Badge variant={value ? 'outline' : 'destructive'} className="text-xs">
-                                {value.toString()}
-                              </Badge>
-                            ) : typeof value === 'object' ? (
-                              <pre className="text-xs overflow-x-auto">{JSON.stringify(value, null, 2)}</pre>
-                            ) : (
-                              String(value)
-                            )}
+                        {/* Bottom: Axial Codes (Fixed height, pinned to bottom) */}
+                        <div className="h-[400px] border-t border-border p-4 overflow-y-auto bg-muted/5">
+                          <h3 className="text-sm font-medium text-foreground mb-2">Axial Codes (Labels)</h3>
+                          <div className="space-y-2">
+                            {judges.map(judge => {
+                              const isAssigned = currentTurnErrors.some(e => e.label === judge.label_name);
+                              return (
+                                <div 
+                                  key={judge.id}
+                                  className={cn(
+                                    "p-2 rounded border text-sm",
+                                    isAssigned 
+                                      ? "bg-destructive/10 border-destructive/30" 
+                                      : "bg-muted/30 border-border"
+                                  )}
+                                >
+                                  <div className="font-mono text-foreground">{judge.label_name}</div>
+                                  <div className="text-xs text-muted-foreground">{judge.description}</div>
+                                  <div className="text-xs mt-1">
+                                    {isAssigned ? (
+                                      <span className="text-destructive">Assigned</span>
+                                    ) : (
+                                      <span className="text-muted-foreground">Not Assigned</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                      </>
+                    )}
+                  </>
                 ) : (
-                  <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
-                    No analysis results available for this conversation.
+                  <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-sm">
+                    Click an assistant turn to view details
                   </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <p>Please select a conversation from the Conversations tab first.</p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="tools" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
-            {tools?.data?.map((tool: any) => (
-              <Card key={tool.id} className="flex flex-col h-full">
-                <CardHeader>
-                  <div className="flex justify-between items-start gap-2">
-                    <CardTitle className="text-base font-mono break-all">{tool.data?.function?.name || tool.id}</CardTitle>
-                    <Badge variant="outline" className="shrink-0">{tool.category}</Badge>
-                  </div>
-                  <CardDescription className="line-clamp-2 text-xs">
-                    {tool.data?.function?.description || "No description"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col gap-4">
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Agent:</span>
-                      <span className="font-medium truncate max-w-[150px]" title={tool.agent}>{tool.agent || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Company:</span>
-                      <span className="font-medium">{tool.company}</span>
-                    </div>
-                  </div>
-                  {tool.data?.function?.parameters && (
-                     <div className="mt-auto pt-2">
-                       <p className="text-xs font-medium mb-1 text-muted-foreground">Parameters</p>
-                       <div className="p-2 bg-muted/50 rounded text-[10px] font-mono overflow-x-auto max-h-[200px]">
-                         <pre>{JSON.stringify(tool.data.function.parameters, null, 2)}</pre>
-                       </div>
-                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-            {!tools?.data?.length && (
-              <div className="col-span-full text-center py-12 text-muted-foreground">
-                No tools found for this project.
+                )}
               </div>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+            </TabsContent>
+
+            <TabsContent value="analysis" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
+              {selectedConversation ? (
+                <div className="max-w-4xl mx-auto space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold">Conversation Analysis</h2>
+                      <p className="text-sm text-muted-foreground font-mono">{selectedConversation.id}</p>
+                    </div>
+                    <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
+                      {selectedConversation.outcome}
+                    </Badge>
+                  </div>
+
+                  {(() => {
+                    const resultsData = selectedConversation.results && Object.keys(selectedConversation.results).length > 0 
+                      ? selectedConversation.results 
+                      : selectedConversation.raw_data?.analysis?.results || selectedConversation.raw_data?.results || {};
+                    const hasResults = Object.keys(resultsData).length > 0;
+
+                    return hasResults ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Results Parameters</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {Object.entries(resultsData).map(([key, value]) => (
+                            <div key={key} className="p-3 rounded-md border bg-muted/20">
+                              <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
+                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              </div>
+                              <div className="text-sm font-mono break-words">
+                                {typeof value === 'boolean' ? (
+                                  <Badge variant={value ? 'outline' : 'destructive'} className="text-xs">
+                                    {value.toString()}
+                                  </Badge>
+                                ) : typeof value === 'object' ? (
+                                  <pre className="text-xs overflow-x-auto">{JSON.stringify(value, null, 2)}</pre>
+                                ) : (
+                                  String(value)
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    ) : (
+                      <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
+                        No analysis results available for this conversation.
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <p>Please select a conversation from the Conversations tab first.</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
 
       {/* Analytics Dialog */}
       <AnalyticsDialog 

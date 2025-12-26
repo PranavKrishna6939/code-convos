@@ -9,6 +9,7 @@ import ProjectDetail from "./pages/ProjectDetail";
 import JudgeAgents from "./pages/JudgeAgents";
 import JudgeAgentEdit from "./pages/JudgeAgentEdit";
 import PromptOptimizer from "./pages/PromptOptimizer";
+import ProjectTools from "./pages/ProjectTools";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Projects />} />
               <Route path="/project/:projectId" element={<ProjectDetail />} />
+              <Route path="/project/:projectId/tools" element={<ProjectTools />} />
               <Route path="/project/:projectId/optimizer" element={<PromptOptimizer />} />
               <Route path="/judges" element={<JudgeAgents />} />
               <Route path="/judges/:agentId" element={<JudgeAgentEdit />} />
