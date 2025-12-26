@@ -621,14 +621,14 @@ const ProjectDetail = () => {
                 </Badge>
               </div>
 
-              {selectedConversation.results ? (
+              {(selectedConversation.results && Object.keys(selectedConversation.results).length > 0) || (selectedConversation.raw_data?.results && Object.keys(selectedConversation.raw_data.results).length > 0) ? (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Results Parameters</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(selectedConversation.results).map(([key, value]) => (
+                      {Object.entries(selectedConversation.results || selectedConversation.raw_data?.results || {}).map(([key, value]) => (
                         <div key={key} className="p-3 rounded-md border bg-muted/20">
                           <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                             {key.replace(/([A-Z])/g, ' $1').trim()}
