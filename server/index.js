@@ -1605,12 +1605,19 @@ app.post('/api/run-analysis-judge', async (req, res) => {
         messagesToProcess = messagesToProcess.slice(1);
     }
 
+    // Determine the correct analysis output to use (matching frontend logic)
+    const analysisOutput = conversation.results && Object.keys(conversation.results).length > 0 
+        ? conversation.results 
+        : (conversation.raw_data?.analysis?.results || conversation.raw_data?.results || conversation.analysis || {});
+
     const context = {
         master_prompt: masterPrompt,
         info_extraction_parameters: infoExtractionParams,
         transcript: messagesToProcess,
-        analysis_output: conversation.analysis
+        analysis_output: analysisOutput
     };
+
+    console.log('Analysis Output for Judge:', JSON.stringify(analysisOutput, null, 2));
 
     // 4. Define Tool Schema
     let dynamicProperties = {};
@@ -1621,7 +1628,7 @@ app.post('/api/run-analysis-judge', async (req, res) => {
             dynamicProperties[key] = {
                 type: "object",
                 properties: {
-                    status: { type: "boolean", description: "Validation status. Set to true if the value is acceptable, or false if it is incorrect or should be flagged based on the instructions." },
+                    status: { type: "boolean", description: "Validation status. Set to TRUE if the value is correct and compliant. Set to FALSE if the value is incorrect, has a discrepancy, or if the instructions explicitly require flagging it." },
                     reason: { type: "string", description: "Explanation for the validation status." }
                 },
                 required: ["status", "reason"]
@@ -1632,7 +1639,7 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
     const tool = {
         name: "analysis_verification",
-        description: "Verify the extracted parameters based on the conversation transcript and the provided instructions. For each parameter, provide a validation status and a detailed reason.",
+        description: "Verify the extracted parameters based on the conversation transcript and the provided instructions. You MUST provide a validation status and reason for EVERY parameter defined in the schema.",
         properties: dynamicProperties,
         required: requiredFields
     };
