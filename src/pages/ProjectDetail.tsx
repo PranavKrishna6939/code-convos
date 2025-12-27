@@ -431,9 +431,19 @@ const ProjectDetail = () => {
           {filteredConversations.map(conv => {
             const isSelected = conv.id === selectedConvId;
             const hasErrors = conv.turn_errors && Object.keys(conv.turn_errors).length > 0;
+            
+            // Calculate results keys to ensure we only flag errors for visible parameters
+            const results = conv.results && Object.keys(conv.results).length > 0 
+                ? conv.results 
+                : (conv.raw_data?.analysis?.results || conv.raw_data?.results || {});
+            const resultKeys = Object.keys(results);
+
             const hasAnalysisErrors = conv.analysis_verification && Object.values(conv.analysis_verification).some((r: any) => {
                 if (r && typeof r === 'object') {
-                    return Object.values(r).some((param: any) => param?.status === false);
+                    return Object.entries(r).some(([key, param]: [string, any]) => {
+                        // Only flag if status is explicitly false AND the parameter is visible in the UI
+                        return param?.status === false && resultKeys.includes(key);
+                    });
                 }
                 return false;
             });
