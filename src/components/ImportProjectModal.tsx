@@ -124,7 +124,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
           </Button>
           <Button 
             onClick={handleImport}
-            disabled={!apiKey || !projectName || !numConversations || !agent || isLoading}
+            disabled={!apiKey || !projectName || !numConversations || isLoading}
           >
             {isLoading ? 'Importing...' : 'Import'}
           </Button>
