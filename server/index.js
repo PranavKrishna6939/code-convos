@@ -1597,18 +1597,11 @@ app.post('/api/run-analysis-judge', async (req, res) => {
         const expectedToolName = `${project.agent}_info_extraction`;
         console.log(`Looking for tool named: ${expectedToolName}`);
 
-        // Prioritize exact match, then fall back to loose match
-        let infoExtractionTool = tools.find(t => {
+        const infoExtractionTool = tools.find(t => {
             const toolName = t.name || t.id || (t.function && t.function.name);
-            return toolName === expectedToolName;
+            // Strict check: Must match expected name OR start with agent name and end with _info_extraction
+            return toolName === expectedToolName || (toolName && toolName.startsWith(project.agent) && toolName.endsWith('_info_extraction'));
         });
-
-        if (!infoExtractionTool) {
-             infoExtractionTool = tools.find(t => {
-                const toolName = t.name || t.id || (t.function && t.function.name);
-                return toolName && toolName.endsWith('_info_extraction');
-            });
-        }
 
         if (infoExtractionTool) {
             console.log('Found info_extraction tool:', JSON.stringify(infoExtractionTool, null, 2));
@@ -1654,13 +1647,14 @@ app.post('/api/run-analysis-judge', async (req, res) => {
     }
 
     // Determine the correct analysis output to use (matching frontend logic)
-    let analysisOutput = conversation.results && Object.keys(conversation.results).length > 0 
+     let analysisOutput = conversation.results && Object.keys(conversation.results).length > 0 
         ? { ...conversation.results }
         : { ...(conversation.raw_data?.analysis?.results || conversation.raw_data?.results || conversation.analysis || {}) };
 
-    // Remove outcome parameter if present
+    // Remove outcome and summary parameters if present
     if (analysisOutput && typeof analysisOutput === 'object') {
         delete analysisOutput.outcome;
+        delete analysisOutput.summary;
     }
 
     const context = {
@@ -1775,6 +1769,165 @@ app.post('/api/run-analysis-judge', async (req, res) => {
         console.error('LLM response data:', error.response.data);
     }
     res.status(500).json({ error: 'Analysis Judge execution failed', details: error.message });
+  }
+});
+
+// Run Analysis Optimization (Bucketing)
+app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (req, res) => {
+  const { projectId, judgeId } = req.params;
+  const { provider, model, temperature } = req.body;
+
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const judge = db.judges.find(j => j.id === judgeId);
+  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+
+  // Collect errors from all conversations
+  const errorsToAnalyze = [];
+  const MAX_ERRORS = 50;
+
+  for (const conversation of db.conversations) {
+    if (conversation.projectId !== projectId) continue;
+    if (errorsToAnalyze.length >= MAX_ERRORS) break;
+
+    // Get analysis result
+    const analysisResult = conversation.analysis_verification?.[judgeId];
+    
+    if (!analysisResult || !analysisResult.flagged_parameters || !Array.isArray(analysisResult.flagged_parameters)) {
+        continue;
+    }
+
+    for (const error of analysisResult.flagged_parameters) {
+        if (errorsToAnalyze.length >= MAX_ERRORS) break;
+
+        errorsToAnalyze.push({
+            conversationId: conversation.id,
+            parameter_name: error.parameter_name,
+            extracted_value: error.extracted_value,
+            reason: error.reason
+        });
+    }
+  }
+
+  console.log(`Found ${errorsToAnalyze.length} analysis errors to analyze for judge ${judge.label_name}`);
+
+  if (errorsToAnalyze.length === 0) {
+    return res.json({ success: true, buckets: [] });
+  }
+
+  try {
+    const tool = {
+      name: "analysis_bucketing_result",
+      description: "Submit the categorized error buckets for analysis failures.",
+      properties: {
+        buckets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              description: { type: "string" },
+              examples: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    conversationId: { type: "string" },
+                    parameter_name: { type: "string" },
+                    reason: { type: "string" }
+                  },
+                  required: ["conversationId", "parameter_name", "reason"]
+                }
+              }
+            },
+            required: ["title", "description", "examples"]
+          }
+        }
+      },
+      required: ["buckets"]
+    };
+
+    const payload = {
+      config: {
+        provider: provider || judge.provider || "openai",
+        model: model || judge.model || "gpt-4.1-mini",
+        temperature: temperature !== undefined ? parseFloat(temperature) : 0.4
+      },
+      prompt: metaPrompts.analysis_bucketing
+        .replace(/\$\{judge\.label_name\}/g, judge.label_name)
+        .replace(/\$\{judge\.description\}/g, judge.description)
+        .replace(/\$\{judge\.prompt\}/g, judge.prompt),
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify(errorsToAnalyze, null, 2)
+        }
+      ],
+      tool: tool
+    };
+
+    const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    let result = response.data;
+    
+    // Standard parsing logic
+    if (typeof result === 'string') {
+        try {
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
+        } catch (e) {
+            console.error('Failed to parse Analysis Optimization result:', e);
+        }
+    }
+    if (result && result.message) result = result.message;
+    if (typeof result === 'string') {
+        try {
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
+        } catch (e) {
+            console.error('Failed to parse inner result:', e);
+        }
+    }
+
+    // Enrich buckets with full context (extracted value)
+    if (result && result.buckets) {
+      result.buckets.forEach(bucket => {
+        if (bucket.examples) {
+          bucket.examples.forEach(example => {
+            const originalError = errorsToAnalyze.find(e => 
+              e.conversationId === example.conversationId && 
+              e.parameter_name === example.parameter_name
+            );
+            
+            if (originalError) {
+              example.extracted_value = originalError.extracted_value;
+            }
+          });
+        }
+      });
+    }
+
+    // Save to project
+    if (!project.analysis_optimizations) {
+      project.analysis_optimizations = {};
+    }
+    project.analysis_optimizations[judgeId] = {
+      timestamp: Date.now(),
+      buckets: result.buckets || []
+    };
+    saveDb();
+
+    res.json({ success: true, buckets: result.buckets });
+
+  } catch (error) {
+    console.error('Analysis Optimization error:', error.message);
+    if (error.response) {
+        console.error('LLM response data:', error.response.data);
+    }
+    res.status(500).json({ error: 'Analysis Optimization failed', details: error.message });
   }
 });
 

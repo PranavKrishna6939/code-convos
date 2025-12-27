@@ -244,6 +244,16 @@ export const api = {
     return res.json();
   },
 
+  runAnalysisOptimization: async (projectId: string, judgeId: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, buckets: any[] }> => {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/analysis-optimizations/${judgeId}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, model, temperature }),
+    });
+    if (!res.ok) throw new Error('Failed to run analysis optimization');
+    return res.json();
+  },
+
   markBucketFixed: async (projectId: string, judgeId: string, bucketIndex: number): Promise<void> => {
     const res = await fetch(`${API_BASE}/projects/${projectId}/optimizations/${judgeId}/buckets/${bucketIndex}/fix`, {
       method: 'POST',

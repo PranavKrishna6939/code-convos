@@ -207,6 +207,17 @@ export default function PromptOptimizer() {
   const optimizeMutation = useMutation({
     mutationFn: async () => {
       if (!selectedJudgeId || !projectId) return;
+      
+      if (selectedJudge?.category === 'analysis') {
+        return api.runAnalysisOptimization(
+          projectId,
+          selectedJudgeId,
+          optimizerProvider,
+          optimizerModel,
+          optimizerTemperature
+        );
+      }
+
       return api.optimizePrompt(
         projectId, 
         selectedJudgeId,
@@ -387,7 +398,9 @@ export default function PromptOptimizer() {
     setIsDiffOpen(false);
   };
 
-  const optimizationResult = project?.optimizations?.[selectedJudgeId];
+  const optimizationResult = selectedJudge?.category === 'analysis' 
+    ? project?.analysis_optimizations?.[selectedJudgeId]
+    : project?.optimizations?.[selectedJudgeId];
 
   if (isProjectLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -796,9 +809,9 @@ export default function PromptOptimizer() {
                     
                     <div className="space-y-6">
                       <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Representative Examples</h3>
-                      {bucket.examples.map((example, exIdx) => (
+                      {bucket.examples.map((example: any, exIdx) => (
                         <div key={exIdx} className="bg-muted/30 rounded-lg border p-6 space-y-4">
-                          {/* Context */}
+                          {/* Context - Only for Conversation Judges */}
                           {example.context && (
                             <div className="space-y-3 bg-background p-4 rounded border text-sm">
                               <div className="grid grid-cols-[80px_1fr] gap-2">
@@ -816,24 +829,41 @@ export default function PromptOptimizer() {
                             </div>
                           )}
 
+                          {/* Analysis Specific Fields */}
+                          {example.parameter_name && (
+                             <div className="grid md:grid-cols-2 gap-6 border-b pb-4">
+                                <div>
+                                  <span className="text-xs font-bold uppercase text-muted-foreground mb-2 block">Parameter</span>
+                                  <code className="text-sm bg-muted p-1 rounded">{example.parameter_name}</code>
+                                </div>
+                                <div>
+                                  <span className="text-xs font-bold uppercase text-muted-foreground mb-2 block">Extracted Value</span>
+                                  <code className="text-sm bg-muted p-1 rounded break-all">{JSON.stringify(example.extracted_value)}</code>
+                                </div>
+                             </div>
+                          )}
+
                           <div className="grid md:grid-cols-2 gap-6">
                             <div>
                               <span className="text-xs font-bold uppercase text-red-500 mb-2 block">Error Reason</span>
                               <p className="text-sm leading-relaxed">{example.reason}</p>
                             </div>
 
-                            <div>
-                              <span className="text-xs font-bold uppercase text-green-600 mb-2 block">Suggested Correction</span>
-                              {example.suggestion ? (
-                                <p className="text-sm leading-relaxed bg-green-50 dark:bg-green-900/20 p-3 rounded border border-green-100 dark:border-green-900/30 text-green-900 dark:text-green-100">
-                                  {example.suggestion}
-                                </p>
-                              ) : (
-                                <div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded border border-dashed">
-                                  No suggestion generated yet. Click "Generate Suggestions" above to create corrections that satisfy multiple judges.
+                            {/* Only show suggestion if it exists (Conversation Judge) */}
+                            {!example.parameter_name && (
+                                <div>
+                                  <span className="text-xs font-bold uppercase text-green-600 mb-2 block">Suggested Correction</span>
+                                  {example.suggestion ? (
+                                    <p className="text-sm leading-relaxed bg-green-50 dark:bg-green-900/20 p-3 rounded border border-green-100 dark:border-green-900/30 text-green-900 dark:text-green-100">
+                                      {example.suggestion}
+                                    </p>
+                                  ) : (
+                                    <div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded border border-dashed">
+                                      No suggestion generated yet. Click "Generate Suggestions" above to create corrections that satisfy multiple judges.
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
+                            )}
                           </div>
                         </div>
                       ))}

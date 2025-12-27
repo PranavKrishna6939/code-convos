@@ -65,9 +65,28 @@ export interface OptimizationBucket {
   fixed?: boolean;
 }
 
+export interface AnalysisOptimizationExample {
+  conversationId: string;
+  parameter_name: string;
+  extracted_value?: any;
+  reason: string;
+}
+
+export interface AnalysisOptimizationBucket {
+  title: string;
+  description: string;
+  examples: AnalysisOptimizationExample[];
+  fixed?: boolean;
+}
+
 export interface OptimizationResult {
   timestamp: number;
   buckets: OptimizationBucket[];
+}
+
+export interface AnalysisOptimizationResult {
+  timestamp: number;
+  buckets: AnalysisOptimizationBucket[];
 }
 
 export interface Project {
@@ -77,6 +96,7 @@ export interface Project {
   api_key: string;
   conversationCount?: number;
   optimizations?: Record<string, OptimizationResult>; // judgeId -> result
+  analysis_optimizations?: Record<string, AnalysisOptimizationResult>; // judgeId -> result
   agentPrompt?: string;
   agent?: string;
   tool_prompts?: Record<string, string>;
