@@ -45,6 +45,7 @@ const ProjectDetail = () => {
   const [isManualMode, setIsManualMode] = useState(false);
   const [manualLabelInput, setManualLabelInput] = useState<Record<number, string[]>>({});
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [selectedAnalysisParam, setSelectedAnalysisParam] = useState<string | null>(null);
 
   // Set initial selected conversation
   useEffect(() => {
@@ -430,6 +431,7 @@ const ProjectDetail = () => {
           {filteredConversations.map(conv => {
             const isSelected = conv.id === selectedConvId;
             const hasErrors = conv.turn_errors && Object.keys(conv.turn_errors).length > 0;
+            const hasAnalysisErrors = conv.analysis_verification && Object.values(conv.analysis_verification).some((r: any) => !r.is_correct);
             const isManuallyLabelled = conv.manually_labelled;
             
             return (
@@ -447,7 +449,7 @@ const ProjectDetail = () => {
                   "px-3 py-2 border-b border-border cursor-pointer text-sm relative",
                   isSelected
                     ? "bg-black" 
-                    : hasErrors
+                    : hasErrors || hasAnalysisErrors
                       ? "bg-destructive/10 hover:bg-destructive/20"
                       : "hover:bg-muted/50"
                 )}
@@ -457,6 +459,9 @@ const ProjectDetail = () => {
                     "absolute top-2 right-2 h-3 w-3",
                     isSelected ? "text-green-400" : "text-green-600"
                   )} />
+                )}
+                {hasAnalysisErrors && !isManuallyLabelled && (
+                    <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-destructive" title="Analysis Errors" />
                 )}
                 <span className={cn(
                   "font-mono truncate block pr-5",
@@ -653,7 +658,8 @@ const ProjectDetail = () => {
               </div>
             </TabsContent>
 
-            <TabsContent value="analysis" className="flex-1 overflow-auto p-6 mt-0 data-[state=inactive]:hidden">
+            <TabsContent value="analysis" className="flex-1 flex overflow-hidden mt-0 data-[state=inactive]:hidden">
+              <div className="flex-1 overflow-y-auto p-6">
               {selectedConversation ? (
                 <div className="max-w-4xl mx-auto space-y-6">
                   <div className="flex items-center justify-between">
@@ -666,59 +672,23 @@ const ProjectDetail = () => {
                     </Badge>
                   </div>
 
-                  {/* Verification Results */}
-                  {selectedConversation.analysis_verification && Object.keys(selectedConversation.analysis_verification).length > 0 && (
-                    <div className="space-y-4">
-                        <h3 className="text-md font-semibold">Verification Results</h3>
-                        {Object.entries(selectedConversation.analysis_verification).map(([judgeId, result]) => {
-                            const judge = judges.find(j => j.id === judgeId);
-                            return (
-                                <Card key={judgeId}>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                            <span>{judge?.label_name || judgeId}</span>
-                                            {result.is_correct !== undefined && (
-                                                <Badge variant={result.is_correct ? "default" : "destructive"}>
-                                                    {result.is_correct ? "Correct" : "Discrepancies Found"}
-                                                </Badge>
-                                            )}
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {result.discrepancies && result.discrepancies.length > 0 ? (
-                                            <div className="space-y-2">
-                                                {result.discrepancies.map((d: any, idx: number) => (
-                                                    <div key={idx} className="bg-muted/50 p-3 rounded-md text-sm">
-                                                        <div className="font-semibold text-destructive">{d.parameter_name}</div>
-                                                        <div className="grid grid-cols-2 gap-2 mt-1">
-                                                            <div>
-                                                                <span className="text-xs text-muted-foreground">Extracted:</span>
-                                                                <div className="font-mono text-xs">{d.extracted_value}</div>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-xs text-muted-foreground">Correct:</span>
-                                                                <div className="font-mono text-xs">{d.correct_value}</div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="mt-2 text-muted-foreground text-xs">{d.reason}</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-sm text-muted-foreground">No discrepancies found.</div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                    </div>
-                  )}
-
                   {(() => {
                     const resultsData = selectedConversation.results && Object.keys(selectedConversation.results).length > 0 
                       ? selectedConversation.results 
                       : selectedConversation.raw_data?.analysis?.results || selectedConversation.raw_data?.results || {};
                     const hasResults = Object.keys(resultsData).length > 0;
+
+                    // Helper to check if a parameter has an error
+                    const getParamError = (paramName: string) => {
+                        if (!selectedConversation.analysis_verification) return null;
+                        for (const [judgeId, result] of Object.entries(selectedConversation.analysis_verification)) {
+                            if (result.discrepancies) {
+                                const discrepancy = result.discrepancies.find((d: any) => d.parameter_name === paramName);
+                                if (discrepancy) return { judgeId, ...discrepancy };
+                            }
+                        }
+                        return null;
+                    };
 
                     return hasResults ? (
                     <Card>
@@ -727,10 +697,24 @@ const ProjectDetail = () => {
                       </CardHeader>
                       <CardContent className="p-0">
                         <div className="divide-y">
-                          {Object.entries(resultsData).map(([key, value]) => (
-                            <div key={key} className="flex items-center justify-between p-3 hover:bg-muted/5 transition-colors">
+                          {Object.entries(resultsData).map(([key, value]) => {
+                            const error = getParamError(key);
+                            const isSelected = selectedAnalysisParam === key;
+                            
+                            return (
+                            <div 
+                                key={key} 
+                                onClick={() => setSelectedAnalysisParam(key)}
+                                className={cn(
+                                    "flex items-center justify-between p-2 transition-colors cursor-pointer",
+                                    error 
+                                        ? "bg-destructive/10 hover:bg-destructive/20" 
+                                        : "hover:bg-muted/5",
+                                    isSelected && "ring-2 ring-primary inset-0"
+                                )}
+                            >
                               <div className="w-1/3 shrink-0 pr-4">
-                                <div className="font-medium text-sm text-foreground truncate" title={key}>
+                                <div className={cn("font-medium text-sm truncate", error ? "text-destructive" : "text-foreground")} title={key}>
                                   {key}
                                 </div>
                                 <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
@@ -751,7 +735,7 @@ const ProjectDetail = () => {
                                 )}
                               </div>
                             </div>
-                          ))}
+                          )})}
                         </div>
                       </CardContent>
                     </Card>
@@ -767,6 +751,74 @@ const ProjectDetail = () => {
                   <p>Please select a conversation from the Conversations tab first.</p>
                 </div>
               )}
+              </div>
+
+              {/* Right Sidebar for Analysis Details */}
+              <div className="w-80 border-l border-border flex flex-col bg-background shrink-0">
+                {selectedAnalysisParam ? (
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <h3 className="text-sm font-medium text-foreground mb-4">
+                            Parameter Details
+                        </h3>
+                        <div className="p-3 bg-muted/30 rounded-md border mb-4">
+                            <div className="text-xs text-muted-foreground font-mono mb-1">Parameter</div>
+                            <div className="font-medium text-sm break-all">{selectedAnalysisParam}</div>
+                        </div>
+
+                        {(() => {
+                            // Find errors for this parameter
+                            const errors = [];
+                            if (selectedConversation?.analysis_verification) {
+                                for (const [judgeId, result] of Object.entries(selectedConversation.analysis_verification)) {
+                                    if (result.discrepancies) {
+                                        const discrepancy = result.discrepancies.find((d: any) => d.parameter_name === selectedAnalysisParam);
+                                        if (discrepancy) {
+                                            const judge = judges.find(j => j.id === judgeId);
+                                            errors.push({ judgeName: judge?.label_name || judgeId, ...discrepancy });
+                                        }
+                                    }
+                                }
+                            }
+
+                            return errors.length > 0 ? (
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-semibold text-destructive uppercase tracking-wider">Discrepancies Found</h4>
+                                    {errors.map((err, idx) => (
+                                        <div key={idx} className="space-y-3">
+                                            <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-md">
+                                                <div className="text-xs font-semibold text-destructive mb-2">{err.judgeName}</div>
+                                                
+                                                <div className="space-y-2">
+                                                    <div>
+                                                        <span className="text-[10px] uppercase text-muted-foreground font-semibold">Extracted Value</span>
+                                                        <div className="text-xs font-mono bg-background p-1.5 rounded border mt-0.5">{err.extracted_value}</div>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[10px] uppercase text-muted-foreground font-semibold">Correct Value</span>
+                                                        <div className="text-xs font-mono bg-background p-1.5 rounded border mt-0.5">{err.correct_value}</div>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[10px] uppercase text-muted-foreground font-semibold">Reason</span>
+                                                        <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{err.reason}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-sm text-muted-foreground text-center py-8">
+                                    No discrepancies found for this parameter.
+                                </div>
+                            );
+                        })()}
+                    </div>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-sm text-center">
+                        Click a parameter to view details
+                    </div>
+                )}
+              </div>
             </TabsContent>
           </Tabs>
         </div>
