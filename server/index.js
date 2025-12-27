@@ -1621,8 +1621,8 @@ app.post('/api/run-analysis-judge', async (req, res) => {
             dynamicProperties[key] = {
                 type: "object",
                 properties: {
-                    status: { type: "boolean", description: "True if the extracted value is correct according to the transcript, False otherwise." },
-                    reason: { type: "string", description: "Explanation for why the value is correct or incorrect." }
+                    status: { type: "boolean", description: "Validation status. Set to true if the value is acceptable, or false if it is incorrect or should be flagged based on the instructions." },
+                    reason: { type: "string", description: "Explanation for the validation status." }
                 },
                 required: ["status", "reason"]
             };
@@ -1632,10 +1632,13 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
     const tool = {
         name: "analysis_verification",
-        description: "Verify if the extracted parameters match the conversation transcript. For each parameter, provide a status and a reason.",
+        description: "Verify the extracted parameters based on the conversation transcript and the provided instructions. For each parameter, provide a validation status and a detailed reason.",
         properties: dynamicProperties,
         required: requiredFields
     };
+
+    console.log('Judge Prompt:', judge.prompt);
+    console.log('Tool Definition:', JSON.stringify(tool, null, 2));
 
     // 5. Call LLM
     const payload = {

@@ -43,6 +43,7 @@ export interface Conversation {
   manually_labelled?: boolean; // flag to indicate if conversation has been manually labelled
   analysis_verification?: Record<string, any>; // judgeId -> result
   analysis?: any; // Analysis output
+  raw_data?: any;
 }
 
 export interface OptimizationExample {
