@@ -431,7 +431,12 @@ const ProjectDetail = () => {
           {filteredConversations.map(conv => {
             const isSelected = conv.id === selectedConvId;
             const hasErrors = conv.turn_errors && Object.keys(conv.turn_errors).length > 0;
-            const hasAnalysisErrors = conv.analysis_verification && Object.values(conv.analysis_verification).some((r: any) => !r.is_correct);
+            const hasAnalysisErrors = conv.analysis_verification && Object.values(conv.analysis_verification).some((r: any) => {
+                if (r && typeof r === 'object') {
+                    return Object.values(r).some((param: any) => param?.status === false);
+                }
+                return false;
+            });
             const isManuallyLabelled = conv.manually_labelled;
             
             return (
@@ -682,9 +687,9 @@ const ProjectDetail = () => {
                     const getParamError = (paramName: string) => {
                         if (!selectedConversation.analysis_verification) return null;
                         for (const [judgeId, result] of Object.entries(selectedConversation.analysis_verification)) {
-                            if (result.discrepancies) {
-                                const discrepancy = result.discrepancies.find((d: any) => d.parameter_name === paramName);
-                                if (discrepancy) return { judgeId, ...discrepancy };
+                            const paramResult = (result as any)[paramName];
+                            if (paramResult && paramResult.status === false) {
+                                return { judgeId, reason: paramResult.reason };
                             }
                         }
                         return null;
@@ -770,12 +775,10 @@ const ProjectDetail = () => {
                             const errors = [];
                             if (selectedConversation?.analysis_verification) {
                                 for (const [judgeId, result] of Object.entries(selectedConversation.analysis_verification)) {
-                                    if (result.discrepancies) {
-                                        const discrepancy = result.discrepancies.find((d: any) => d.parameter_name === selectedAnalysisParam);
-                                        if (discrepancy) {
-                                            const judge = judges.find(j => j.id === judgeId);
-                                            errors.push({ judgeName: judge?.label_name || judgeId, ...discrepancy });
-                                        }
+                                    const paramResult = (result as any)[selectedAnalysisParam];
+                                    if (paramResult && paramResult.status === false) {
+                                        const judge = judges.find(j => j.id === judgeId);
+                                        errors.push({ judgeName: judge?.label_name || judgeId, reason: paramResult.reason });
                                     }
                                 }
                             }
@@ -789,14 +792,6 @@ const ProjectDetail = () => {
                                                 <div className="text-xs font-semibold text-destructive mb-2">{err.judgeName}</div>
                                                 
                                                 <div className="space-y-2">
-                                                    <div>
-                                                        <span className="text-[10px] uppercase text-muted-foreground font-semibold">Extracted Value</span>
-                                                        <div className="text-xs font-mono bg-background p-1.5 rounded border mt-0.5">{err.extracted_value}</div>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-[10px] uppercase text-muted-foreground font-semibold">Correct Value</span>
-                                                        <div className="text-xs font-mono bg-background p-1.5 rounded border mt-0.5">{err.correct_value}</div>
-                                                    </div>
                                                     <div>
                                                         <span className="text-[10px] uppercase text-muted-foreground font-semibold">Reason</span>
                                                         <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{err.reason}</div>

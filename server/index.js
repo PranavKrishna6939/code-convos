@@ -1613,26 +1613,28 @@ app.post('/api/run-analysis-judge', async (req, res) => {
     };
 
     // 4. Define Tool Schema
+    let dynamicProperties = {};
+    let requiredFields = [];
+
+    if (infoExtractionParams && infoExtractionParams.properties) {
+        for (const key of Object.keys(infoExtractionParams.properties)) {
+            dynamicProperties[key] = {
+                type: "object",
+                properties: {
+                    status: { type: "boolean", description: "True if the extracted value is correct according to the transcript, False otherwise." },
+                    reason: { type: "string", description: "Explanation for why the value is correct or incorrect." }
+                },
+                required: ["status", "reason"]
+            };
+            requiredFields.push(key);
+        }
+    }
+
     const tool = {
         name: "analysis_verification",
-        description: "Verify if the extracted parameters match the conversation transcript.",
-        properties: {
-          discrepancies: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                parameter_name: { type: "string" },
-                extracted_value: { type: "string" },
-                correct_value: { type: "string" },
-                reason: { type: "string" }
-              },
-              required: ["parameter_name", "extracted_value", "correct_value", "reason"]
-            }
-          },
-          is_correct: { type: "boolean" }
-        },
-        required: ["discrepancies", "is_correct"]
+        description: "Verify if the extracted parameters match the conversation transcript. For each parameter, provide a status and a reason.",
+        properties: dynamicProperties,
+        required: requiredFields
     };
 
     // 5. Call LLM
