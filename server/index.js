@@ -1599,7 +1599,8 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
         const infoExtractionTool = tools.find(t => {
             const toolName = t.name || t.id || (t.function && t.function.name);
-            return toolName === expectedToolName || (toolName && toolName.endsWith('_info_extraction'));
+            // Strict check: Must match expected name OR start with agent name and end with _info_extraction
+            return toolName === expectedToolName || (toolName && toolName.startsWith(project.agent) && toolName.endsWith('_info_extraction'));
         });
 
         if (infoExtractionTool) {
