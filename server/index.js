@@ -1576,13 +1576,28 @@ app.post('/api/run-analysis-judge', async (req, res) => {
     try {
         const toolsUrl = `https://api.hoomanlabs.com/routes/v1/tools/?agent=${encodeURIComponent(project.agent)}`;
         const toolsResponse = await axios.get(toolsUrl, { headers: { 'Authorization': project.api_key } });
-        const tools = toolsResponse.data;
+        let tools = toolsResponse.data;
+        
+        // Handle different response structures
+        if (!Array.isArray(tools)) {
+            if (tools.data && Array.isArray(tools.data)) {
+                tools = tools.data;
+            } else if (typeof tools === 'object') {
+                tools = [tools];
+            } else {
+                tools = [];
+            }
+        }
+
         const infoExtractionTool = tools.find(t => t.name === 'info_extraction');
         if (infoExtractionTool) {
             infoExtractionParams = infoExtractionTool.parameters;
+        } else {
+            console.log('info_extraction tool not found in tools list:', tools.map(t => t.name));
         }
     } catch (e) {
         console.log('Failed to fetch tools:', e.message);
+        if (e.response) console.log('Tools API Response:', JSON.stringify(e.response.data));
     }
 
     // 2. Fetch Agent to get Master Prompt
