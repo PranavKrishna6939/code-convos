@@ -458,7 +458,7 @@ app.get('/api/judges/:id', (req, res) => {
 });
 
 app.post('/api/judges', (req, res) => {
-  const { label_name, description, prompt, model, temperature, provider, judge_type, labels_schema } = req.body;
+  const { label_name, description, prompt, model, temperature, provider, judge_type, labels_schema, category } = req.body;
   const newJudge = {
     id: Date.now().toString(),
     label_name,
@@ -468,6 +468,7 @@ app.post('/api/judges', (req, res) => {
     temperature: temperature !== undefined ? temperature : 0.5,
     provider: provider || 'openai',
     judge_type: judge_type || 'single',
+    category: category || 'conversation',
     labels_schema: labels_schema || undefined
   };
   db.judges.push(newJudge);
@@ -476,7 +477,7 @@ app.post('/api/judges', (req, res) => {
 });
 
 app.put('/api/judges/:id', (req, res) => {
-  const { label_name, description, prompt, model, temperature, provider, judge_type, labels_schema } = req.body;
+  const { label_name, description, prompt, model, temperature, provider, judge_type, labels_schema, category } = req.body;
   const idx = db.judges.findIndex(j => j.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Judge not found' });
 
@@ -489,6 +490,7 @@ app.put('/api/judges/:id', (req, res) => {
     temperature: temperature !== undefined ? temperature : (db.judges[idx].temperature !== undefined ? db.judges[idx].temperature : 0.5),
     provider: provider || db.judges[idx].provider || 'openai',
     judge_type: judge_type || db.judges[idx].judge_type || 'single',
+    category: category || db.judges[idx].category || 'conversation',
     labels_schema: labels_schema !== undefined ? labels_schema : db.judges[idx].labels_schema
   };
   saveDb();

@@ -45,26 +45,6 @@ const ProjectDetail = () => {
   const [isManualMode, setIsManualMode] = useState(false);
   const [manualLabelInput, setManualLabelInput] = useState<Record<number, string[]>>({});
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  const [selectedAnalysisJudge, setSelectedAnalysisJudge] = useState<string>('');
-
-  const analysisJudges = useMemo(() => 
-    judges.filter(j => j.category === 'analysis'),
-    [judges]
-  );
-
-  const runAnalysisJudgeMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedAnalysisJudge || !projectId || !selectedConvId) return;
-      return api.runAnalysisJudge(projectId, selectedConvId, selectedAnalysisJudge);
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      toast({ title: "Analysis Judge Completed", description: "Verification results updated." });
-    },
-    onError: (error) => {
-      toast({ title: "Analysis Judge Failed", description: error.message, variant: "destructive" });
-    }
-  });
 
   // Set initial selected conversation
   useEffect(() => {
@@ -183,16 +163,32 @@ const ProjectDetail = () => {
     }
   });
 
-  const handleRunJudge = () => {
-    if (selectedConvId) {
-      runJudgeMutation.mutate({ convId: selectedConvId });
-      toast({ title: "Success", description: "Judge run started" });
+  const handleRunJudge = async () => {
+    if (!selectedConvId || !selectedJudge) return;
+    
+    const judge = judges.find(j => j.id === selectedJudge);
+    if (!judge) return;
+
+    if (judge.category === 'analysis') {
+        try {
+            await api.runAnalysisJudge(projectId!, selectedConvId, selectedJudge);
+            queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+            toast({ title: "Success", description: "Analysis Judge run completed" });
+        } catch (e: any) {
+            toast({ title: "Error", description: e.message, variant: "destructive" });
+        }
+    } else {
+        runJudgeMutation.mutate({ convId: selectedConvId });
+        toast({ title: "Success", description: "Judge run started" });
     }
   };
 
   const handleRunAllFiltered = async () => {
     if (!selectedJudge || !projectId || filteredConversations.length === 0) return;
     
+    const judge = judges.find(j => j.id === selectedJudge);
+    if (!judge) return;
+
     setIsBatchRunning(true);
     toast({ title: "Batch Run Started", description: `Running judge on ${filteredConversations.length} conversations...` });
 
@@ -202,7 +198,11 @@ const ProjectDetail = () => {
     for (const conv of filteredConversations) {
       completed++;
       try {
-        await api.runJudge(projectId, conv.id, selectedJudge, { current: completed, total });
+        if (judge.category === 'analysis') {
+            await api.runAnalysisJudge(projectId, conv.id, selectedJudge);
+        } else {
+            await api.runJudge(projectId, conv.id, selectedJudge, { current: completed, total });
+        }
       } catch (e) {
         console.error(`Failed to run judge on ${conv.id}`, e);
       }
@@ -370,11 +370,26 @@ const ProjectDetail = () => {
                   <SelectValue placeholder="Select judge..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {judges.map(judge => (
-                    <SelectItem key={judge.id} value={judge.id}>
-                      {judge.label_name}
-                    </SelectItem>
-                  ))}
+                  {judges.some(j => j.category === 'conversation' || !j.category) && (
+                    <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Conversation Judges</div>
+                        {judges.filter(j => j.category === 'conversation' || !j.category).map(judge => (
+                            <SelectItem key={judge.id} value={judge.id}>
+                            {judge.label_name}
+                            </SelectItem>
+                        ))}
+                    </>
+                  )}
+                  {judges.some(j => j.category === 'analysis') && (
+                    <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">Analysis Judges</div>
+                        {judges.filter(j => j.category === 'analysis').map(judge => (
+                            <SelectItem key={judge.id} value={judge.id}>
+                            {judge.label_name}
+                            </SelectItem>
+                        ))}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
               <Button 
@@ -646,29 +661,9 @@ const ProjectDetail = () => {
                       <h2 className="text-lg font-semibold">Conversation Analysis</h2>
                       <p className="text-sm text-muted-foreground font-mono">{selectedConversation.id}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Select value={selectedAnalysisJudge} onValueChange={setSelectedAnalysisJudge}>
-                            <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="Select Analysis Judge" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {analysisJudges.map(j => (
-                                    <SelectItem key={j.id} value={j.id}>{j.label_name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button 
-                            onClick={() => runAnalysisJudgeMutation.mutate()} 
-                            disabled={!selectedAnalysisJudge || runAnalysisJudgeMutation.isPending}
-                            size="icon"
-                            variant="outline"
-                        >
-                            {runAnalysisJudgeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                        </Button>
-                        <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
-                            {selectedConversation.outcome}
-                        </Badge>
-                    </div>
+                    <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
+                      {selectedConversation.outcome}
+                    </Badge>
                   </div>
 
                   {/* Verification Results */}
@@ -727,30 +722,32 @@ const ProjectDetail = () => {
 
                     return hasResults ? (
                     <Card>
-                      <CardHeader>
+                      <CardHeader className="pb-3">
                         <CardTitle className="text-base">Results Parameters</CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="border rounded-md divide-y">
+                      <CardContent className="p-0">
+                        <div className="divide-y">
                           {Object.entries(resultsData).map(([key, value]) => (
-                            <div key={key} className="p-4 flex flex-col sm:flex-row gap-4 sm:items-start justify-between bg-card hover:bg-muted/5 transition-colors">
-                              <div className="sm:w-1/3 shrink-0">
-                                <div className="font-semibold text-sm text-foreground">
+                            <div key={key} className="flex items-center justify-between p-3 hover:bg-muted/5 transition-colors">
+                              <div className="w-1/3 shrink-0 pr-4">
+                                <div className="font-medium text-sm text-foreground truncate" title={key}>
                                   {key}
                                 </div>
-                                <div className="text-xs text-muted-foreground mt-1 font-mono">
+                                <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                                   {typeof value}
                                 </div>
                               </div>
-                              <div className="sm:w-2/3 text-sm text-foreground break-words">
-                                {typeof value === 'boolean' ? (
-                                  <Badge variant={value ? 'outline' : 'secondary'} className={cn("text-xs", !value && "text-muted-foreground")}>
+                              <div className="w-2/3 text-sm text-foreground font-mono break-all text-right">
+                                {value === null || value === undefined ? (
+                                    <span className="text-muted-foreground italic">null</span>
+                                ) : typeof value === 'boolean' ? (
+                                  <Badge variant={value ? 'outline' : 'secondary'} className={cn("text-xs font-normal", !value && "text-muted-foreground")}>
                                     {value.toString()}
                                   </Badge>
                                 ) : typeof value === 'object' ? (
-                                  <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">{JSON.stringify(value, null, 2)}</pre>
+                                  <pre className="text-xs text-left overflow-x-auto bg-muted p-2 rounded inline-block max-w-full">{JSON.stringify(value, null, 2)}</pre>
                                 ) : (
-                                  <span className="font-medium">{String(value)}</span>
+                                  <span>{String(value)}</span>
                                 )}
                               </div>
                             </div>
