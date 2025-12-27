@@ -1593,19 +1593,27 @@ app.post('/api/run-analysis-judge', async (req, res) => {
             console.log('First tool structure:', JSON.stringify(tools[0], null, 2));
         }
 
+        const expectedToolName = `${project.agent}_info_extraction`;
+        console.log(`Looking for tool named: ${expectedToolName}`);
+
         const infoExtractionTool = tools.find(t => {
             const toolName = t.name || t.id || (t.function && t.function.name);
-            return toolName && toolName.endsWith('info_extraction');
+            return toolName === expectedToolName || (toolName && toolName.endsWith('_info_extraction'));
         });
 
         if (infoExtractionTool) {
+            console.log('Found info_extraction tool:', JSON.stringify(infoExtractionTool, null, 2));
+            
             // Handle different parameter locations
             if (infoExtractionTool.parameters) {
                 infoExtractionParams = infoExtractionTool.parameters;
             } else if (infoExtractionTool.function && infoExtractionTool.function.parameters) {
                 infoExtractionParams = infoExtractionTool.function.parameters;
+            } else if (infoExtractionTool.input_schema) {
+                infoExtractionParams = infoExtractionTool.input_schema;
             }
-            console.log('Found info_extraction tool:', infoExtractionTool.name || infoExtractionTool.id);
+            
+            console.log('Extracted Params:', JSON.stringify(infoExtractionParams, null, 2));
         } else {
             console.log('info_extraction tool not found. Available tools:', tools.map(t => t.name || t.id || (t.function && t.function.name)));
         }
