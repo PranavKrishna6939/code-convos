@@ -1609,6 +1609,8 @@ app.post('/api/run-analysis-judge', async (req, res) => {
                 infoExtractionParams = infoExtractionTool.parameters;
             } else if (infoExtractionTool.function && infoExtractionTool.function.parameters) {
                 infoExtractionParams = infoExtractionTool.function.parameters;
+            } else if (infoExtractionTool.data && infoExtractionTool.data.function && infoExtractionTool.data.function.parameters) {
+                infoExtractionParams = infoExtractionTool.data.function.parameters;
             } else if (infoExtractionTool.input_schema) {
                 infoExtractionParams = infoExtractionTool.input_schema;
             }
