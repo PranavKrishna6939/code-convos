@@ -454,7 +454,7 @@ const ProjectDetail = () => {
                   "px-3 py-2 border-b border-border cursor-pointer text-sm relative",
                   isSelected
                     ? "bg-black" 
-                    : hasErrors || hasAnalysisErrors
+                    : hasErrors
                       ? "bg-destructive/10 hover:bg-destructive/20"
                       : "hover:bg-muted/50"
                 )}

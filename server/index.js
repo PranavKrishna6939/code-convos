@@ -1664,11 +1664,15 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
     if (infoExtractionParams && infoExtractionParams.properties) {
         for (const key of Object.keys(infoExtractionParams.properties)) {
+            const originalParam = infoExtractionParams.properties[key];
+            const originalDesc = originalParam.description || "";
+
             dynamicProperties[key] = {
                 type: "object",
+                description: `Evaluation for '${key}'. Definition: ${originalDesc}`,
                 properties: {
-                    status: { type: "boolean", description: "Validation status. Set to TRUE if the value is correct and compliant. Set to FALSE if the value is incorrect, has a discrepancy, or if the instructions explicitly require flagging it." },
-                    reason: { type: "string", description: "Explanation for the validation status." }
+                    status: { type: "boolean", description: "Evaluation status based on the Judge Prompt. Set to FALSE if the value should be flagged according to the instructions (e.g., if the instruction is to find errors, or specifically flag certain values). Set to TRUE only if the value is acceptable and should NOT be flagged." },
+                    reason: { type: "string", description: "Detailed explanation for the status, strictly following the style or requirements requested in the Judge Prompt." }
                 },
                 required: ["status", "reason"]
             };
@@ -1678,7 +1682,7 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
     const tool = {
         name: "analysis_verification",
-        description: "Verify the extracted parameters based on the conversation transcript and the provided instructions. You MUST provide a validation status and reason for EVERY parameter defined in the schema.",
+        description: "Analyze the extracted parameters. The Judge Prompt (instructions) is the HIGHEST PRIORITY. You must evaluate every parameter against the Judge Prompt and the transcript. You MUST provide a status and reason for EVERY parameter defined in the schema.",
         properties: dynamicProperties,
         required: requiredFields
     };
