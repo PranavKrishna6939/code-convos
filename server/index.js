@@ -1589,11 +1589,25 @@ app.post('/api/run-analysis-judge', async (req, res) => {
             }
         }
 
-        const infoExtractionTool = tools.find(t => t.name === 'info_extraction');
+        if (tools.length > 0) {
+            console.log('First tool structure:', JSON.stringify(tools[0], null, 2));
+        }
+
+        const infoExtractionTool = tools.find(t => {
+            const toolName = t.name || t.id || (t.function && t.function.name);
+            return toolName && toolName.endsWith('info_extraction');
+        });
+
         if (infoExtractionTool) {
-            infoExtractionParams = infoExtractionTool.parameters;
+            // Handle different parameter locations
+            if (infoExtractionTool.parameters) {
+                infoExtractionParams = infoExtractionTool.parameters;
+            } else if (infoExtractionTool.function && infoExtractionTool.function.parameters) {
+                infoExtractionParams = infoExtractionTool.function.parameters;
+            }
+            console.log('Found info_extraction tool:', infoExtractionTool.name || infoExtractionTool.id);
         } else {
-            console.log('info_extraction tool not found in tools list:', tools.map(t => t.name));
+            console.log('info_extraction tool not found. Available tools:', tools.map(t => t.name || t.id || (t.function && t.function.name)));
         }
     } catch (e) {
         console.log('Failed to fetch tools:', e.message);
