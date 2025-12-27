@@ -1659,21 +1659,27 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
     console.log('Analysis Output for Judge:', JSON.stringify(analysisOutput, null, 2));
 
-    // 4. Define Tool Schema
+    // 4. Define Tool Schema & Prompt Context
     let dynamicProperties = {};
     let requiredFields = [];
+    let propertiesContext = "\n\nProperties\nThese are the outputted properties. [DO NOT STRICTLY MAKE CHANGES TO THESE PROPERTIES. THEY ARE ONLY FOR REFERENCE]\n\n";
 
     if (infoExtractionParams && infoExtractionParams.properties) {
+        let i = 1;
         for (const key of Object.keys(infoExtractionParams.properties)) {
             const originalParam = infoExtractionParams.properties[key];
             const originalDesc = originalParam.description || "";
 
+            // Add to prompt context
+            propertiesContext += `${i}. Name: ${key}\n   Type: ${originalParam.type}\n   Description: ${originalDesc}\n\n`;
+            i++;
+
+            // Add to tool schema (simplified)
             dynamicProperties[key] = {
                 type: "object",
-                description: `Evaluation for '${key}'. Definition: ${originalDesc}`,
                 properties: {
-                    status: { type: "boolean", description: "Evaluation status based on the Judge Prompt. Set to FALSE if the value should be flagged according to the instructions (e.g., if the instruction is to find errors, or specifically flag certain values). Set to TRUE only if the value is acceptable and should NOT be flagged." },
-                    reason: { type: "string", description: "Detailed explanation for the status, strictly following the style or requirements requested in the Judge Prompt." }
+                    status: { type: "boolean", description: "Evaluation status based on the Judge Prompt. Set to FALSE if the value should be flagged. Set to TRUE if acceptable." },
+                    reason: { type: "string", description: "Detailed explanation for the status." }
                 },
                 required: ["status", "reason"]
             };
@@ -1683,13 +1689,18 @@ app.post('/api/run-analysis-judge', async (req, res) => {
 
     const tool = {
         name: "analysis_verification",
-        description: "Analyze the extracted parameters. The Judge Prompt (instructions) is the HIGHEST PRIORITY. You must evaluate every parameter against the Judge Prompt and the transcript. You MUST provide a status and reason for EVERY parameter defined in the schema.",
+        description: "Analyze the extracted parameters. You must evaluate every parameter against the Judge Prompt and the transcript. You MUST provide a status and reason for EVERY parameter defined in the schema.",
         properties: dynamicProperties,
         required: requiredFields
     };
 
-    console.log('Judge Prompt:', judge.prompt);
-    console.log('Tool Definition:', JSON.stringify(tool, null, 2));
+    const finalPrompt = judge.prompt + propertiesContext;
+    console.log('--- FINAL PROMPT START ---');
+    console.log(finalPrompt);
+    console.log('--- FINAL PROMPT END ---');
+    console.log('--- TOOL DEFINITION START ---');
+    console.log(JSON.stringify(tool, null, 2));
+    console.log('--- TOOL DEFINITION END ---');
 
     // 5. Call LLM
     const payload = {
@@ -1698,7 +1709,7 @@ app.post('/api/run-analysis-judge', async (req, res) => {
         model: judge.model || "gpt-4.1-mini", 
         temperature: judge.temperature !== undefined ? judge.temperature : 0.1
       },
-      prompt: judge.prompt,
+      prompt: finalPrompt,
       messages: [
         {
           role: "user",
