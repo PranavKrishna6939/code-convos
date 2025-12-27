@@ -439,11 +439,12 @@ const ProjectDetail = () => {
             const resultKeys = Object.keys(results);
 
             const hasAnalysisErrors = conv.analysis_verification && Object.values(conv.analysis_verification).some((r: any) => {
-                if (r && typeof r === 'object') {
-                    return Object.entries(r).some(([key, param]: [string, any]) => {
-                        // Only flag if status is explicitly false AND the parameter is visible in the UI
-                        return param?.status === false && resultKeys.includes(key);
-                    });
+                if (r && r.error_detected) {
+                     // Check if any of the flagged parameters are actually in the results (visible)
+                     if (Array.isArray(r.flagged_parameters)) {
+                         return r.flagged_parameters.some((p: any) => resultKeys.includes(p.parameter_name));
+                     }
+                     return true;
                 }
                 return false;
             });
@@ -697,9 +698,12 @@ const ProjectDetail = () => {
                     const getParamError = (paramName: string) => {
                         if (!selectedConversation.analysis_verification) return null;
                         for (const [judgeId, result] of Object.entries(selectedConversation.analysis_verification)) {
-                            const paramResult = (result as any)[paramName];
-                            if (paramResult && paramResult.status === false) {
-                                return { judgeId, reason: paramResult.reason };
+                            const res = result as any;
+                            if (res.error_detected && Array.isArray(res.flagged_parameters)) {
+                                const discrepancy = res.flagged_parameters.find((p: any) => p.parameter_name === paramName);
+                                if (discrepancy) {
+                                    return { judgeId, reason: discrepancy.reason };
+                                }
                             }
                         }
                         return null;
@@ -785,10 +789,13 @@ const ProjectDetail = () => {
                             const errors = [];
                             if (selectedConversation?.analysis_verification) {
                                 for (const [judgeId, result] of Object.entries(selectedConversation.analysis_verification)) {
-                                    const paramResult = (result as any)[selectedAnalysisParam];
-                                    if (paramResult && paramResult.status === false) {
-                                        const judge = judges.find(j => j.id === judgeId);
-                                        errors.push({ judgeName: judge?.label_name || judgeId, reason: paramResult.reason });
+                                    const res = result as any;
+                                    if (res.error_detected && Array.isArray(res.flagged_parameters)) {
+                                        const discrepancy = res.flagged_parameters.find((p: any) => p.parameter_name === selectedAnalysisParam);
+                                        if (discrepancy) {
+                                            const judge = judges.find(j => j.id === judgeId);
+                                            errors.push({ judgeName: judge?.label_name || judgeId, reason: discrepancy.reason });
+                                        }
                                     }
                                 }
                             }

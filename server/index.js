@@ -1660,8 +1660,6 @@ app.post('/api/run-analysis-judge', async (req, res) => {
     console.log('Analysis Output for Judge:', JSON.stringify(analysisOutput, null, 2));
 
     // 4. Define Tool Schema & Prompt Context
-    let dynamicProperties = {};
-    let requiredFields = [];
     let propertiesContext = "\n\nProperties\nThese are the outputted properties. [DO NOT STRICTLY MAKE CHANGES TO THESE PROPERTIES. THEY ARE ONLY FOR REFERENCE]\n\n";
 
     if (infoExtractionParams && infoExtractionParams.properties) {
@@ -1673,25 +1671,36 @@ app.post('/api/run-analysis-judge', async (req, res) => {
             // Add to prompt context
             propertiesContext += `${i}. Name: ${key}\n   Type: ${originalParam.type}\n   Description: ${originalDesc}\n\n`;
             i++;
-
-            // Add to tool schema (simplified)
-            dynamicProperties[key] = {
-                type: "object",
-                properties: {
-                    status: { type: "boolean", description: "Evaluation status based on the Judge Prompt. Set to FALSE if the value should be flagged. Set to TRUE if acceptable." },
-                    reason: { type: "string", description: "Detailed explanation for the status." }
-                },
-                required: ["status", "reason"]
-            };
-            requiredFields.push(key);
         }
     }
 
     const tool = {
         name: "analysis_verification",
-        description: "Analyze the extracted parameters. You must evaluate every parameter against the Judge Prompt and the transcript. You MUST provide a status and reason for EVERY parameter defined in the schema.",
-        properties: dynamicProperties,
-        required: requiredFields
+        description: "Analyze the extracted parameters. Evaluate against the Judge Prompt and transcript. If any parameter violates the instructions, flag it.",
+        properties: {
+            error_detected: { 
+                type: "boolean",
+                description: "Set to true if any parameter is incorrect or should be flagged based on the instructions."
+            },
+            flagged_parameters: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        parameter_name: { 
+                            type: "string",
+                            description: "The name of the parameter being flagged."
+                        },
+                        reason: { 
+                            type: "string",
+                            description: "Detailed explanation for why this parameter is flagged."
+                        }
+                    },
+                    required: ["parameter_name", "reason"]
+                }
+            }
+        },
+        required: ["error_detected", "flagged_parameters"]
     };
 
     const finalPrompt = judge.prompt + propertiesContext;
