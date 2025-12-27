@@ -30,6 +30,7 @@ const JudgeAgentEdit = () => {
   const [temperature, setTemperature] = useState('0.5');
   const [provider, setProvider] = useState('openai');
   const [judgeType, setJudgeType] = useState<'single' | 'multi'>('single');
+  const [category, setCategory] = useState<'conversation' | 'analysis'>('conversation');
   const [labelsSchema, setLabelsSchema] = useState<Record<string, { type: string; description: string; enum?: string[] }>>({});
 
   useEffect(() => {
@@ -41,6 +42,7 @@ const JudgeAgentEdit = () => {
       setTemperature(existingAgent.temperature?.toString() || '0.5');
       setProvider(existingAgent.provider || 'openai');
       setJudgeType(existingAgent.judge_type || 'single');
+      setCategory(existingAgent.category || 'conversation');
       setLabelsSchema(existingAgent.labels_schema || {});
     }
   }, [existingAgent]);
@@ -82,6 +84,7 @@ const JudgeAgentEdit = () => {
       temperature: parseFloat(temperature),
       provider,
       judge_type: judgeType,
+      category,
       labels_schema: judgeType === 'multi' ? labelsSchema : undefined
     };
     if (isNew) {
@@ -162,23 +165,39 @@ const JudgeAgentEdit = () => {
 
       <div className="max-w-4xl mx-auto px-6 py-6">
         <div className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="judgeType">Judge Type</Label>
-            <Select value={judgeType} onValueChange={(v) => setJudgeType(v as 'single' | 'multi')}>
-              <SelectTrigger id="judgeType" className="max-w-md">
-                <SelectValue placeholder="Select judge type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="single">Single Label (one error type)</SelectItem>
-                <SelectItem value="multi">Multi Label (multiple error types per turn)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {judgeType === 'single' 
-                ? 'Single-label judges check for one specific error type at a time.'
-                : 'Multi-label judges can detect multiple error types in each turn.'}
-            </p>
+          <div className="grid grid-cols-2 gap-4 max-w-2xl">
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select value={category} onValueChange={(v) => setCategory(v as 'conversation' | 'analysis')}>
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="conversation">Conversation Judge</SelectItem>
+                  <SelectItem value="analysis">Analysis Judge</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="judgeType">Judge Type</Label>
+              <Select value={judgeType} onValueChange={(v) => setJudgeType(v as 'single' | 'multi')}>
+                <SelectTrigger id="judgeType">
+                  <SelectValue placeholder="Select judge type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">Single Label (one error type)</SelectItem>
+                  <SelectItem value="multi">Multi Label (multiple error types per turn)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          
+          <p className="text-xs text-muted-foreground">
+            {judgeType === 'single' 
+              ? 'Single-label judges check for one specific error type at a time.'
+              : 'Multi-label judges can detect multiple error types in each turn.'}
+          </p>
 
           <div className="space-y-2">
             <Label htmlFor="labelName">Label Name</Label>

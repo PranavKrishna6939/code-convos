@@ -86,16 +86,6 @@ const ProjectTools = () => {
     }
   });
 
-  const handleSaveAgent = () => {
-    if (!agentName.trim()) {
-      toast.error('Please enter an agent name');
-      return;
-    }
-    updateProjectMutation.mutate({ agent: agentName });
-    // Refetch tools will happen automatically due to query key dependency or we can force it
-    setTimeout(() => refetchTools(), 100);
-  };
-
   const handleSavePrompt = (toolName: string) => {
     const newPrompts = { ...toolPrompts };
     updateProjectMutation.mutate({ tool_prompts: newPrompts });
@@ -152,22 +142,16 @@ const ProjectTools = () => {
       </div>
 
       <div className="container mx-auto py-6 max-w-5xl space-y-8">
+        
+        {/* Agent Info Card */}
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
-            <label htmlFor="agent" className="text-sm font-medium whitespace-nowrap">
+            <div className="text-sm font-medium whitespace-nowrap">
               Agent Name:
-            </label>
-            <Input 
-              id="agent" 
-              placeholder="e.g. clickpost_order_confirmation_hi-IN_v4" 
-              value={agentName}
-              onChange={(e) => setAgentName(e.target.value)}
-              className="h-8 w-[400px]"
-            />
-            <Button size="sm" onClick={handleSaveAgent} disabled={updateProjectMutation.isPending}>
-              {updateProjectMutation.isPending && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-              Load Tools
-            </Button>
+            </div>
+            <div className="font-mono text-sm bg-muted px-3 py-1.5 rounded border">
+              {agentName || <span className="text-muted-foreground italic">No agent configured</span>}
+            </div>
           </CardContent>
         </Card>
 

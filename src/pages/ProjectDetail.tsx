@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Conversation, TurnError } from '@/types/judge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3, Sparkles, Wrench } from 'lucide-react';
+import { ArrowLeft, Play, Trash2, CheckCircle2, BarChart3, Sparkles, Wrench, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -45,6 +45,26 @@ const ProjectDetail = () => {
   const [isManualMode, setIsManualMode] = useState(false);
   const [manualLabelInput, setManualLabelInput] = useState<Record<number, string[]>>({});
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [selectedAnalysisJudge, setSelectedAnalysisJudge] = useState<string>('');
+
+  const analysisJudges = useMemo(() => 
+    judges.filter(j => j.category === 'analysis'),
+    [judges]
+  );
+
+  const runAnalysisJudgeMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedAnalysisJudge || !projectId || !selectedConvId) return;
+      return api.runAnalysisJudge(projectId, selectedConvId, selectedAnalysisJudge);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast({ title: "Analysis Judge Completed", description: "Verification results updated." });
+    },
+    onError: (error) => {
+      toast({ title: "Analysis Judge Failed", description: error.message, variant: "destructive" });
+    }
+  });
 
   // Set initial selected conversation
   useEffect(() => {
@@ -626,10 +646,78 @@ const ProjectDetail = () => {
                       <h2 className="text-lg font-semibold">Conversation Analysis</h2>
                       <p className="text-sm text-muted-foreground font-mono">{selectedConversation.id}</p>
                     </div>
-                    <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
-                      {selectedConversation.outcome}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                        <Select value={selectedAnalysisJudge} onValueChange={setSelectedAnalysisJudge}>
+                            <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder="Select Analysis Judge" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {analysisJudges.map(j => (
+                                    <SelectItem key={j.id} value={j.id}>{j.label_name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button 
+                            onClick={() => runAnalysisJudgeMutation.mutate()} 
+                            disabled={!selectedAnalysisJudge || runAnalysisJudgeMutation.isPending}
+                            size="icon"
+                            variant="outline"
+                        >
+                            {runAnalysisJudgeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                        </Button>
+                        <Badge variant={selectedConversation.outcome === 'confirmed' ? 'default' : 'secondary'}>
+                            {selectedConversation.outcome}
+                        </Badge>
+                    </div>
                   </div>
+
+                  {/* Verification Results */}
+                  {selectedConversation.analysis_verification && Object.keys(selectedConversation.analysis_verification).length > 0 && (
+                    <div className="space-y-4">
+                        <h3 className="text-md font-semibold">Verification Results</h3>
+                        {Object.entries(selectedConversation.analysis_verification).map(([judgeId, result]) => {
+                            const judge = judges.find(j => j.id === judgeId);
+                            return (
+                                <Card key={judgeId}>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-medium flex items-center justify-between">
+                                            <span>{judge?.label_name || judgeId}</span>
+                                            {result.is_correct !== undefined && (
+                                                <Badge variant={result.is_correct ? "default" : "destructive"}>
+                                                    {result.is_correct ? "Correct" : "Discrepancies Found"}
+                                                </Badge>
+                                            )}
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {result.discrepancies && result.discrepancies.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {result.discrepancies.map((d: any, idx: number) => (
+                                                    <div key={idx} className="bg-muted/50 p-3 rounded-md text-sm">
+                                                        <div className="font-semibold text-destructive">{d.parameter_name}</div>
+                                                        <div className="grid grid-cols-2 gap-2 mt-1">
+                                                            <div>
+                                                                <span className="text-xs text-muted-foreground">Extracted:</span>
+                                                                <div className="font-mono text-xs">{d.extracted_value}</div>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-xs text-muted-foreground">Correct:</span>
+                                                                <div className="font-mono text-xs">{d.correct_value}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-2 text-muted-foreground text-xs">{d.reason}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-muted-foreground">No discrepancies found.</div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                  )}
 
                   {(() => {
                     const resultsData = selectedConversation.results && Object.keys(selectedConversation.results).length > 0 
@@ -643,21 +731,26 @@ const ProjectDetail = () => {
                         <CardTitle className="text-base">Results Parameters</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="border rounded-md divide-y">
                           {Object.entries(resultsData).map(([key, value]) => (
-                            <div key={key} className="p-3 rounded-md border bg-muted/20">
-                              <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                            <div key={key} className="p-4 flex flex-col sm:flex-row gap-4 sm:items-start justify-between bg-card hover:bg-muted/5 transition-colors">
+                              <div className="sm:w-1/3 shrink-0">
+                                <div className="font-semibold text-sm text-foreground">
+                                  {key}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1 font-mono">
+                                  {typeof value}
+                                </div>
                               </div>
-                              <div className="text-sm font-mono break-words">
+                              <div className="sm:w-2/3 text-sm text-foreground break-words">
                                 {typeof value === 'boolean' ? (
-                                  <Badge variant={value ? 'outline' : 'destructive'} className="text-xs">
+                                  <Badge variant={value ? 'outline' : 'secondary'} className={cn("text-xs", !value && "text-muted-foreground")}>
                                     {value.toString()}
                                   </Badge>
                                 ) : typeof value === 'object' ? (
-                                  <pre className="text-xs overflow-x-auto">{JSON.stringify(value, null, 2)}</pre>
+                                  <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">{JSON.stringify(value, null, 2)}</pre>
                                 ) : (
-                                  String(value)
+                                  <span className="font-medium">{String(value)}</span>
                                 )}
                               </div>
                             </div>

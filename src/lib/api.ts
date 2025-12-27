@@ -130,6 +130,16 @@ export const api = {
     return res.json();
   },
 
+  runAnalysisJudge: async (projectId: string, conversationId: string, judgeId: string) => {
+    const res = await fetch(`${API_BASE}/run-analysis-judge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, conversationId, judgeId }),
+    });
+    if (!res.ok) throw new Error('Failed to run analysis judge');
+    return res.json();
+  },
+
   updateEvaluation: async (projectId: string, conversationId: string, turnIndex: number, label: string, editedReason: string) => {
     const res = await fetch(`${API_BASE}/evaluations`, {
       method: 'POST',

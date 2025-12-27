@@ -8,6 +8,7 @@ export interface JudgeAgent {
   temperature?: number;
   provider?: string;
   judge_type?: 'single' | 'multi'; // single-label or multi-label judge
+  category?: 'conversation' | 'analysis'; // conversation judge or analysis judge
   labels_schema?: Record<string, { type: string; description: string; enum?: string[] }>; // for multi-label judges
 }
 
@@ -40,6 +41,8 @@ export interface Conversation {
   turn_errors: Record<number, TurnError[]>; // turn_index -> errors
   manual_labels?: Record<number, string[]>; // turn_index -> manual labels
   manually_labelled?: boolean; // flag to indicate if conversation has been manually labelled
+  analysis_verification?: Record<string, any>; // judgeId -> result
+  analysis?: any; // Analysis output
 }
 
 export interface OptimizationExample {

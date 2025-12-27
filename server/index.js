@@ -1553,6 +1553,140 @@ app.get('/api/projects/:projectId/analytics/recall', (req, res) => {
   res.json({ analytics });
 });
 
+// Run Analysis Judge
+app.post('/api/run-analysis-judge', async (req, res) => {
+  const { projectId, conversationId, judgeId } = req.body;
+  
+  const project = db.projects.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const conversation = project.conversations.find(c => c.id === conversationId);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+  const judge = db.judges.find(j => j.id === judgeId);
+  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+
+  try {
+    console.log(`Running Analysis Judge for ConvID: ${conversationId}`);
+
+    // 1. Fetch Tools to find info_extraction
+    let infoExtractionParams = "Not found";
+    try {
+        const toolsUrl = `https://api.hoomanlabs.com/routes/v1/tools/?agent=${encodeURIComponent(project.agent)}`;
+        const toolsResponse = await axios.get(toolsUrl, { headers: { 'Authorization': project.api_key } });
+        const tools = toolsResponse.data;
+        const infoExtractionTool = tools.find(t => t.name === 'info_extraction');
+        if (infoExtractionTool) {
+            infoExtractionParams = infoExtractionTool.parameters;
+        }
+    } catch (e) {
+        console.log('Failed to fetch tools:', e.message);
+    }
+
+    // 2. Fetch Agent to get Master Prompt
+    let masterPrompt = "System Prompt not available.";
+    try {
+        const agentUrl = `https://api.hoomanlabs.com/routes/v1/agents/?name=${encodeURIComponent(project.agent)}`;
+        const agentResponse = await axios.get(agentUrl, { headers: { 'Authorization': project.api_key } });
+        const agentData = Array.isArray(agentResponse.data) ? agentResponse.data[0] : agentResponse.data;
+        if (agentData) {
+             if (agentData.system_prompt) masterPrompt = agentData.system_prompt;
+             else if (agentData.prompt) masterPrompt = agentData.prompt;
+        }
+    } catch (e) {
+        console.log('Failed to fetch agent master prompt:', e.message);
+    }
+
+    // 3. Construct Context
+    let messagesToProcess = conversation.messages;
+    if (messagesToProcess.length > 0 && messagesToProcess[0].role === 'user' && messagesToProcess[0].content.includes('Introduce yourself')) {
+        messagesToProcess = messagesToProcess.slice(1);
+    }
+
+    const context = {
+        master_prompt: masterPrompt,
+        info_extraction_parameters: infoExtractionParams,
+        transcript: messagesToProcess,
+        analysis_output: conversation.analysis
+    };
+
+    // 4. Define Tool Schema
+    const tool = {
+        name: "analysis_verification",
+        description: "Verify if the extracted parameters match the conversation transcript.",
+        properties: {
+          discrepancies: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                parameter_name: { type: "string" },
+                extracted_value: { type: "string" },
+                correct_value: { type: "string" },
+                reason: { type: "string" }
+              },
+              required: ["parameter_name", "extracted_value", "correct_value", "reason"]
+            }
+          },
+          is_correct: { type: "boolean" }
+        },
+        required: ["discrepancies", "is_correct"]
+    };
+
+    // 5. Call LLM
+    const payload = {
+      config: {
+        provider: judge.provider || "openai",
+        model: judge.model || "gpt-4.1-mini", 
+        temperature: judge.temperature !== undefined ? judge.temperature : 0.1
+      },
+      prompt: judge.prompt,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify(context)
+        }
+      ],
+      tool
+    };
+
+    const response = await axios.post('https://core.hoomanlabs.com/routes/utils/llm/generate', payload, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    let result = response.data;
+    if (typeof result === 'string') {
+        try {
+            const cleanResult = result.replace(/```json\n?|\n?```/g, '');
+            result = JSON.parse(cleanResult);
+        } catch (e) {
+            console.error('Failed to parse LLM result:', e);
+        }
+    }
+    if (result && result.message) {
+        result = result.message;
+    }
+
+    // 6. Save Result
+    if (!conversation.analysis_verification) {
+        conversation.analysis_verification = {};
+    }
+    conversation.analysis_verification[judgeId] = result;
+    
+    saveDb();
+    res.json({ success: true, result });
+
+  } catch (error) {
+    console.error('Analysis Judge Error:', error.message);
+    if (error.response) {
+        console.error('LLM response data:', error.response.data);
+    }
+    res.status(500).json({ error: 'Analysis Judge execution failed', details: error.message });
+  }
+});
+
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../dist')));
 

@@ -30,6 +30,9 @@ const JudgeAgents = () => {
     }
   };
 
+  const conversationJudges = agents.filter(a => !a.category || a.category === 'conversation');
+  const analysisJudges = agents.filter(a => a.category === 'analysis');
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b border-border">
@@ -46,45 +49,93 @@ const JudgeAgents = () => {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-6">
-        <div className="border border-border rounded-md overflow-hidden">
-          {agents.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No judge agents yet. Click Create to add one.
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Label Name</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Description</th>
-                  <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground w-20">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agents.map((agent) => (
-                  <tr 
-                    key={agent.id}
-                    className="border-t border-border hover:bg-muted/30 cursor-pointer"
-                    onClick={() => navigate(`/judges/${agent.id}`)}
-                  >
-                    <td className="px-4 py-3 text-sm font-mono text-foreground">{agent.label_name}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{agent.description}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => handleDelete(e, agent.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                      </Button>
-                    </td>
+      <div className="max-w-4xl mx-auto px-6 py-6 space-y-8">
+        {/* Conversation Judges */}
+        <div className="space-y-4">
+          <h2 className="text-md font-semibold text-foreground">Conversation Judges</h2>
+          <div className="border border-border rounded-md overflow-hidden">
+            {conversationJudges.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                No conversation judges yet.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Label Name</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Description</th>
+                    <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground w-20">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {conversationJudges.map((agent) => (
+                    <tr 
+                      key={agent.id}
+                      className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                      onClick={() => navigate(`/judges/${agent.id}`)}
+                    >
+                      <td className="px-4 py-3 text-sm font-mono text-foreground">{agent.label_name}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{agent.description}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => handleDelete(e, agent.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Analysis Judges */}
+        <div className="space-y-4">
+          <h2 className="text-md font-semibold text-foreground">Analysis Judges</h2>
+          <div className="border border-border rounded-md overflow-hidden">
+            {analysisJudges.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                No analysis judges yet.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Label Name</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Description</th>
+                    <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground w-20">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analysisJudges.map((agent) => (
+                    <tr 
+                      key={agent.id}
+                      className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                      onClick={() => navigate(`/judges/${agent.id}`)}
+                    >
+                      <td className="px-4 py-3 text-sm font-mono text-foreground">{agent.label_name}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{agent.description}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => handleDelete(e, agent.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
     </div>

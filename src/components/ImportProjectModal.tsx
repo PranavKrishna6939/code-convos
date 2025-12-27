@@ -23,7 +23,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
   const { toast } = useToast();
 
   const handleImport = async () => {
-    if (!apiKey || !projectName || !numConversations) return;
+    if (!apiKey || !projectName || !numConversations || !agent) return;
 
     setIsLoading(true);
     
@@ -108,10 +108,10 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="agent">Agent (optional)</Label>
+            <Label htmlFor="agent">Agent Name</Label>
             <Input
               id="agent"
-              placeholder="e.g., test"
+              placeholder="e.g., clickpost_order_confirmation_hi-IN_v4"
               value={agent}
               onChange={(e) => setAgent(e.target.value)}
             />
@@ -124,7 +124,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
           </Button>
           <Button 
             onClick={handleImport}
-            disabled={!apiKey || !projectName || !numConversations || isLoading}
+            disabled={!apiKey || !projectName || !numConversations || !agent || isLoading}
           >
             {isLoading ? 'Importing...' : 'Import'}
           </Button>
