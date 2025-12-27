@@ -1772,10 +1772,10 @@ app.post('/api/run-analysis-judge', async (req, res) => {
   }
 });
 
-// Run Analysis Optimization (Bucketing)
-app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (req, res) => {
-  const { projectId, judgeId } = req.params;
-  const { provider, model, temperature } = req.body;
+
+// Analyze Tool Errors (Bucketing for Analysis Judges)
+app.post('/api/tools/analyze-errors', async (req, res) => {
+  const { projectId, judgeId, provider, model, temperature } = req.body;
 
   const project = db.projects.find(p => p.id === projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -1785,28 +1785,39 @@ app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (
 
   // Collect errors from all conversations
   const errorsToAnalyze = [];
-  const MAX_ERRORS = 50;
+  const MAX_ERRORS = 50; // Limit context window usage
 
   for (const conversation of db.conversations) {
     if (conversation.projectId !== projectId) continue;
     if (errorsToAnalyze.length >= MAX_ERRORS) break;
-
-    // Get analysis result
-    const analysisResult = conversation.analysis_verification?.[judgeId];
     
-    if (!analysisResult || !analysisResult.flagged_parameters || !Array.isArray(analysisResult.flagged_parameters)) {
-        continue;
-    }
+    // Check for analysis verification results
+    if (!conversation.analysis_verification || !conversation.analysis_verification[judgeId]) continue;
 
-    for (const error of analysisResult.flagged_parameters) {
-        if (errorsToAnalyze.length >= MAX_ERRORS) break;
+    const verification = conversation.analysis_verification[judgeId];
+    
+    // Only process if error detected
+    if (!verification.error_detected || !verification.flagged_parameters || verification.flagged_parameters.length === 0) continue;
 
-        errorsToAnalyze.push({
-            conversationId: conversation.id,
-            parameter_name: error.parameter_name,
-            extracted_value: error.extracted_value,
-            reason: error.reason
-        });
+    // Get conversation transcript for context
+    const transcript = conversation.messages.map(m => `${m.role}: ${m.content}`).join('\n');
+
+    for (const param of verification.flagged_parameters) {
+      if (errorsToAnalyze.length >= MAX_ERRORS) break;
+
+      // Try to get extracted value from conversation.analysis
+      let extractedValue = "N/A";
+      if (conversation.analysis && conversation.analysis[param.parameter_name]) {
+          extractedValue = conversation.analysis[param.parameter_name];
+      }
+
+      errorsToAnalyze.push({
+        conversationId: conversation.id,
+        parameter: param.parameter_name,
+        reason: param.reason,
+        extracted_value: extractedValue,
+        transcript: transcript
+      });
     }
   }
 
@@ -1818,8 +1829,8 @@ app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (
 
   try {
     const tool = {
-      name: "analysis_bucketing_result",
-      description: "Submit the categorized error buckets for analysis failures.",
+      name: "analysis_error_bucketing",
+      description: "Submit the categorized analysis error buckets.",
       properties: {
         buckets: {
           type: "array",
@@ -1833,11 +1844,10 @@ app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (
                 items: {
                   type: "object",
                   properties: {
-                    conversationId: { type: "string" },
-                    parameter_name: { type: "string" },
+                    parameter: { type: "string" },
                     reason: { type: "string" }
                   },
-                  required: ["conversationId", "parameter_name", "reason"]
+                  required: ["parameter", "reason"]
                 }
               }
             },
@@ -1851,10 +1861,10 @@ app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (
     const payload = {
       config: {
         provider: provider || judge.provider || "openai",
-        model: model || judge.model || "gpt-4.1-mini",
-        temperature: temperature !== undefined ? parseFloat(temperature) : 0.4
+        model: model || judge.model || "gpt-4o-mini",
+        temperature: temperature !== undefined ? parseFloat(temperature) : 0.2
       },
-      prompt: metaPrompts.analysis_bucketing
+      prompt: metaPrompts.tool_bucketing
         .replace(/\$\{judge\.label_name\}/g, judge.label_name)
         .replace(/\$\{judge\.description\}/g, judge.description)
         .replace(/\$\{judge\.prompt\}/g, judge.prompt),
@@ -1871,18 +1881,26 @@ app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (
       headers: { 'Content-Type': 'application/json' }
     });
 
+    console.log('LLM Response status:', response.status);
+    
     let result = response.data;
     
-    // Standard parsing logic
+    // If result is string, try to parse it
     if (typeof result === 'string') {
         try {
             const cleanResult = result.replace(/```json\n?|\n?```/g, '');
             result = JSON.parse(cleanResult);
         } catch (e) {
-            console.error('Failed to parse Analysis Optimization result:', e);
+            console.error('Failed to parse Analysis result:', e);
         }
     }
-    if (result && result.message) result = result.message;
+
+    // Handle nested message property if present
+    if (result && result.message) {
+        result = result.message;
+    }
+
+    // If result is still a string after extracting message, parse it again
     if (typeof result === 'string') {
         try {
             const cleanResult = result.replace(/```json\n?|\n?```/g, '');
@@ -1892,29 +1910,11 @@ app.post('/api/projects/:projectId/analysis-optimizations/:judgeId/run', async (
         }
     }
 
-    // Enrich buckets with full context (extracted value)
-    if (result && result.buckets) {
-      result.buckets.forEach(bucket => {
-        if (bucket.examples) {
-          bucket.examples.forEach(example => {
-            const originalError = errorsToAnalyze.find(e => 
-              e.conversationId === example.conversationId && 
-              e.parameter_name === example.parameter_name
-            );
-            
-            if (originalError) {
-              example.extracted_value = originalError.extracted_value;
-            }
-          });
-        }
-      });
-    }
-
     // Save to project
-    if (!project.analysis_optimizations) {
-      project.analysis_optimizations = {};
+    if (!project.tool_optimizations) {
+      project.tool_optimizations = {};
     }
-    project.analysis_optimizations[judgeId] = {
+    project.tool_optimizations[judgeId] = {
       timestamp: Date.now(),
       buckets: result.buckets || []
     };

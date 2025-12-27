@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface ToolProperty {
   type: string;
@@ -45,6 +47,8 @@ const ProjectTools = () => {
   
   const [agentName, setAgentName] = useState('');
   const [toolPrompts, setToolPrompts] = useState<Record<string, string>>({});
+  const [selectedJudgeId, setSelectedJudgeId] = useState<string>('');
+  const [analysisBuckets, setAnalysisBuckets] = useState<any[]>([]);
 
   // Fetch Project
   const { data: project, isLoading: isProjectLoading } = useQuery({
@@ -52,6 +56,15 @@ const ProjectTools = () => {
     queryFn: () => api.getProject(projectId!),
     enabled: !!projectId,
   });
+
+  // Fetch Judges
+  const { data: judges } = useQuery({
+    queryKey: ['judges'],
+    queryFn: api.getJudges,
+  });
+
+  // Filter for Analysis Judges
+  const analysisJudges = judges?.filter(j => j.category === 'analysis') || [];
 
   // Fetch Tools
   const { data: toolsData, isLoading: isToolsLoading, refetch: refetchTools } = useQuery({
@@ -70,8 +83,14 @@ const ProjectTools = () => {
       if (project.tool_prompts) {
         setToolPrompts(project.tool_prompts);
       }
+      // Load existing buckets if a judge is selected
+      if (selectedJudgeId && project.tool_optimizations && project.tool_optimizations[selectedJudgeId]) {
+        setAnalysisBuckets(project.tool_optimizations[selectedJudgeId].buckets || []);
+      } else {
+        setAnalysisBuckets([]);
+      }
     }
-  }, [project]);
+  }, [project, selectedJudgeId]);
 
   // Update Project Mutation
   const updateProjectMutation = useMutation({
@@ -83,6 +102,19 @@ const ProjectTools = () => {
     },
     onError: (error) => {
       toast.error(`Failed to update project: ${error.message}`);
+    }
+  });
+
+  // Analyze Errors Mutation
+  const analyzeErrorsMutation = useMutation({
+    mutationFn: () => api.analyzeToolErrors(projectId!, selectedJudgeId),
+    onSuccess: (data) => {
+      setAnalysisBuckets(data.buckets);
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast.success('Analysis complete');
+    },
+    onError: (error) => {
+      toast.error(`Analysis failed: ${error.message}`);
     }
   });
 
@@ -269,6 +301,87 @@ const ProjectTools = () => {
               </Card>
             );
           })}
+        </div>
+
+        {/* Analysis Error Bucketing Section */}
+        <div className="mt-12 border-t pt-8">
+          <h2 className="text-2xl font-bold mb-4">Analysis Error Optimization</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>Analyze Extraction Errors</CardTitle>
+              <CardDescription>
+                Select an Analysis Judge to group extraction errors into buckets. This helps identify patterns in parameter extraction failures.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex gap-4 items-end">
+                <div className="space-y-2 flex-1">
+                  <label className="text-sm font-medium">Select Analysis Judge</label>
+                  <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a judge..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {analysisJudges.map(judge => (
+                        <SelectItem key={judge.id} value={judge.id}>
+                          {judge.label_name} ({judge.model})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  onClick={() => analyzeErrorsMutation.mutate()}
+                  disabled={!selectedJudgeId || analyzeErrorsMutation.isPending}
+                >
+                  {analyzeErrorsMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Analyze Errors
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {analysisBuckets.length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <h3 className="text-lg font-semibold">Error Buckets</h3>
+                  <Accordion type="single" collapsible className="w-full">
+                    {analysisBuckets.map((bucket, idx) => (
+                      <AccordionItem key={idx} value={`bucket-${idx}`}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex flex-col items-start text-left">
+                            <span className="font-semibold">{bucket.title}</span>
+                            <span className="text-sm text-muted-foreground font-normal mt-1">{bucket.description}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-4 pt-4">
+                            <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Examples</h4>
+                              {bucket.examples.map((ex: any, i: number) => (
+                                <div key={i} className="bg-background border rounded p-3 text-sm">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Badge variant="outline" className="font-mono">{ex.parameter}</Badge>
+                                  </div>
+                                  <p className="text-muted-foreground">{ex.reason}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

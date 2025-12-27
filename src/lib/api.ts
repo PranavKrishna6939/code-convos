@@ -188,6 +188,16 @@ export const api = {
     return res.json();
   },
 
+  analyzeToolErrors: async (projectId: string, judgeId: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, buckets: any[] }> => {
+    const res = await fetch(`${API_BASE}/tools/analyze-errors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, judgeId, provider, model, temperature }),
+    });
+    if (!res.ok) throw new Error('Failed to analyze tool errors');
+    return res.json();
+  },
+
   getMetaPrompts: async (): Promise<{ bucketing: string, suggestions: string, optimization: string }> => {
     const res = await fetch(`${API_BASE}/meta-prompts`);
     if (!res.ok) throw new Error('Failed to fetch meta prompts');
@@ -241,16 +251,6 @@ export const api = {
       body: JSON.stringify({ projectId, judgeIds, provider, model, temperature }),
     });
     if (!res.ok) throw new Error('Failed to generate global suggestions');
-    return res.json();
-  },
-
-  runAnalysisOptimization: async (projectId: string, judgeId: string, provider?: string, model?: string, temperature?: number): Promise<{ success: boolean, buckets: any[] }> => {
-    const res = await fetch(`${API_BASE}/projects/${projectId}/analysis-optimizations/${judgeId}/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, model, temperature }),
-    });
-    if (!res.ok) throw new Error('Failed to run analysis optimization');
     return res.json();
   },
 
