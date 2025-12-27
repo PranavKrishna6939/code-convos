@@ -149,8 +149,21 @@ const ProjectTools = () => {
             <div className="text-sm font-medium whitespace-nowrap">
               Agent Name:
             </div>
-            <div className="font-mono text-sm bg-muted px-3 py-1.5 rounded border">
-              {agentName || <span className="text-muted-foreground italic">No agent configured</span>}
+            <div className="flex-1 flex items-center gap-2">
+                <Input 
+                    value={agentName} 
+                    onChange={(e) => setAgentName(e.target.value)} 
+                    placeholder="Enter agent name..."
+                    className="font-mono text-sm max-w-md"
+                />
+                <Button 
+                    size="sm" 
+                    onClick={() => updateProjectMutation.mutate({ agent: agentName })}
+                    disabled={updateProjectMutation.isPending || agentName === project?.agent}
+                >
+                    {updateProjectMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                    Save
+                </Button>
             </div>
           </CardContent>
         </Card>

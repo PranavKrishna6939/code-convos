@@ -413,6 +413,7 @@ app.delete('/api/projects/:id/labels', (req, res) => {
   // Reset turn_errors for all conversations
   project.conversations.forEach(conv => {
     conv.turn_errors = {};
+    conv.analysis_verification = {};
   });
 
   saveDb();

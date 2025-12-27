@@ -23,7 +23,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
   const { toast } = useToast();
 
   const handleImport = async () => {
-    if (!apiKey || !projectName || !numConversations || !agent) return;
+    if (!apiKey || !projectName || !numConversations) return;
 
     setIsLoading(true);
     
@@ -35,7 +35,7 @@ const ImportProjectModal = ({ open, onOpenChange, onImport }: ImportProjectModal
       // Reset form
       setApiKey('');
       setProjectName('');
-      setNumConversations('10');
+      setNumConversations('50');
       setOutcomes('');
       setAgent('');
       
