@@ -1597,11 +1597,18 @@ app.post('/api/run-analysis-judge', async (req, res) => {
         const expectedToolName = `${project.agent}_info_extraction`;
         console.log(`Looking for tool named: ${expectedToolName}`);
 
-        const infoExtractionTool = tools.find(t => {
+        // Prioritize exact match, then fall back to loose match
+        let infoExtractionTool = tools.find(t => {
             const toolName = t.name || t.id || (t.function && t.function.name);
-            // Strict check: Must match expected name OR start with agent name and end with _info_extraction
-            return toolName === expectedToolName || (toolName && toolName.startsWith(project.agent) && toolName.endsWith('_info_extraction'));
+            return toolName === expectedToolName;
         });
+
+        if (!infoExtractionTool) {
+             infoExtractionTool = tools.find(t => {
+                const toolName = t.name || t.id || (t.function && t.function.name);
+                return toolName && toolName.endsWith('_info_extraction');
+            });
+        }
 
         if (infoExtractionTool) {
             console.log('Found info_extraction tool:', JSON.stringify(infoExtractionTool, null, 2));
@@ -1647,9 +1654,14 @@ app.post('/api/run-analysis-judge', async (req, res) => {
     }
 
     // Determine the correct analysis output to use (matching frontend logic)
-    const analysisOutput = conversation.results && Object.keys(conversation.results).length > 0 
-        ? conversation.results 
-        : (conversation.raw_data?.analysis?.results || conversation.raw_data?.results || conversation.analysis || {});
+    let analysisOutput = conversation.results && Object.keys(conversation.results).length > 0 
+        ? { ...conversation.results }
+        : { ...(conversation.raw_data?.analysis?.results || conversation.raw_data?.results || conversation.analysis || {}) };
+
+    // Remove outcome parameter if present
+    if (analysisOutput && typeof analysisOutput === 'object') {
+        delete analysisOutput.outcome;
+    }
 
     const context = {
         master_prompt: masterPrompt,
